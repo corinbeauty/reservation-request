@@ -193,7 +193,7 @@
         .summary-box { background: var(--primary-dark); border: 1px solid var(--accent-gold); padding: 25px; border-radius: 8px; margin-top: 25px; display: flex; justify-content: space-around; text-align: center; flex-wrap: wrap; gap: 15px;}
         .summary-item { flex: 1; min-width: 120px; }
         .summary-item h4 { color: var(--text-gray); font-size: 14px; margin-bottom: 10px; font-weight: normal;}
-        .summary-item span { font-size: 26px; font-weight: bold; color: var(--accent-gold); }
+        .summary-item span { font-size: 24px; font-weight: bold; color: var(--accent-gold); }
 
         .status-select { font-weight: bold; }
         .status-select.s-pending { color: var(--status-pending); border-color: var(--status-pending); }
@@ -364,7 +364,7 @@
                 </div>
                 <div class="summary-item">
                     <h4>訂金繳付狀態</h4>
-                    <span id="sum-deposit" style="font-size: 20px; color: var(--accent-gold);">未繳付</span>
+                    <span id="sum-deposit" style="font-size: 18px; color: var(--accent-gold);">未繳付</span>
                 </div>
             </div>
         </div>
@@ -722,7 +722,7 @@
         window.deleteGroup = async (e, id) => {
             e.stopPropagation();
             const pwd = await window.customPrompt("⚠️ 刪除專案請輸入權限密碼：");
-            if (pwd === "8888") { 
+            if (pwd === "jerry1016") { 
                 const confirmDel = await window.customConfirm("確定要永久刪除此專案嗎？");
                 if (confirmDel) {
                     await deleteDoc(doc(db, "groups", id));
@@ -910,7 +910,6 @@
             document.getElementById('sum-female').innerText = totalFemale;
             document.getElementById('sum-price').innerText = '$' + totalPrice.toLocaleString();
             
-            // 顯示訂金狀態於底部統計
             const depAmount = group.depositAmount || 0;
             const depDate = group.depositDate || '';
             const depMethod = group.depositMethod || '未選擇';
