@@ -127,7 +127,7 @@
         .top-bar h2 { font-size: 18px; font-weight: normal; color: var(--accent-gold); }
         
         .view-section { padding: 25px; display: none; max-width: 900px; margin: 0 auto; width: 100%; }
-        .view-section.active { display: block; } /* Ensure active class works */
+        .view-section.active { display: block; }
         
         .card { background: var(--secondary-dark); border-radius: 8px; padding: 25px; margin-bottom: 25px; border: 1px solid var(--border-color); border-top: 4px solid var(--primary-green); }
         h3 { color: var(--accent-gold); margin-bottom: 20px; font-weight: normal; letter-spacing: 1px; font-size: 18px; display: flex; justify-content: space-between; align-items: center;}
@@ -143,6 +143,18 @@
         input:focus, select:focus, textarea:focus { border-color: var(--accent-gold); outline: none; }
         input[readonly], select:disabled { background-color: rgba(255,255,255,0.05); color: #888; cursor: not-allowed; border-color: transparent;}
         
+        /* 讓日期與時間的選擇圖示反轉為白色，並確保滑鼠游標為點擊狀態 */
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+            opacity: 0.8;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator:hover,
+        input[type="time"]::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+        }
+
         .notice-box { background: rgba(212, 175, 55, 0.1); border-left: 4px solid var(--accent-gold); padding: 20px; margin-bottom: 25px; border-radius: 0 4px 4px 0; font-size: 14px; line-height: 1.8; color: #ddd; }
         
         /* Guest List */
@@ -287,7 +299,9 @@
 
             <div class="card">
                 <h3>顧客名單與服務需求</h3>
-                <div class="quick-add-box admin-only">
+                
+                <!-- 開放給客端使用的快速新增區塊，移除了 admin-only class -->
+                <div class="quick-add-box">
                     <span style="font-size: 14px; color: var(--text-gray);">快速新增空位：</span>
                     <input type="number" id="quick-add-num" min="1" max="50" value="10">
                     <button class="btn-quick-add" onclick="quickAddGuests()">批次產生欄位</button>
@@ -300,7 +314,7 @@
             </div>
 
             <div class="card">
-                <h3>備註事項 (客端可填寫)</h3>
+                <h3>備註事項</h3>
                 <textarea id="db-remarks" rows="4" class="auto-save" placeholder="如有其他特殊需求請填寫於此..."></textarea>
             </div>
 
@@ -526,9 +540,7 @@
                     currentGroupId = clientGroupId;
                     onSnapshot(doc(db, "groups", clientGroupId), async (docSnap) => {
                         if (docSnap.exists()) {
-                            // ★ 修復客端黑畫面：強制加上 active 顯示視圖
                             document.getElementById('view-group').classList.add('active'); 
-                            
                             groupsData[clientGroupId] = docSnap.data();
                             renderGroupData(groupsData[clientGroupId]);
                             lockClientFields();
@@ -663,7 +675,7 @@
         window.deleteGroup = async (e, id) => {
             e.stopPropagation();
             const pwd = await window.customPrompt("⚠️ 刪除專案請輸入權限密碼：");
-            if (pwd === "admin888") {
+            if (pwd === "8888") { // 密碼已統一為 8888
                 const confirmDel = await window.customConfirm("確定要永久刪除此專案嗎？");
                 if (confirmDel) {
                     await deleteDoc(doc(db, "groups", id));
