@@ -354,7 +354,6 @@
         </div>
     </div>
 
-    <!-- Firebase & Main Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -527,7 +526,7 @@
                     groupsData = {};
                     snapshot.forEach(doc => { 
                         groupsData[doc.id] = doc.data(); 
-                        groupsData[doc.id]._id = doc.id; // 確保管理員模式綁定 ID
+                        groupsData[doc.id]._id = doc.id;
                     });
                     renderGroupList();
                 });
@@ -538,7 +537,7 @@
                         if (docSnap.exists()) {
                             document.getElementById('view-group').classList.add('active'); 
                             groupsData[clientGroupId] = docSnap.data();
-                            groupsData[clientGroupId]._id = clientGroupId; // ★ 核心修復：確保客端模式綁定 ID
+                            groupsData[clientGroupId]._id = clientGroupId; 
                             renderGroupData(groupsData[clientGroupId]);
                             lockClientFields();
                             checkDateAlert(groupsData[clientGroupId].date);
@@ -612,6 +611,24 @@
             if(g.status === '已確認') statusClass = 'status-confirmed';
             if(g.status === '已完成') statusClass = 'status-completed';
 
+            // 計算人數與項目摘要
+            let totalPeople = 0;
+            let summaryText = [];
+            if (g.itemCounts) {
+                Object.keys(g.itemCounts).forEach(itemId => {
+                    const count = g.itemCounts[itemId].count || 0;
+                    if (count > 0) {
+                        totalPeople += count;
+                        const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
+                        const itemName = itemDef ? itemDef.name.split(' ')[0] : "未知項目"; 
+                        summaryText.push(`${itemName} x${count}`);
+                    }
+                });
+            }
+            let summaryHtml = totalPeople > 0
+                ? `<div style="font-size: 13px; color: var(--accent-gold); margin-top: 6px; line-height: 1.4;">👥 共 ${totalPeople} 人<br><span style="color: #999; font-size: 12px;">${summaryText.join('、')}</span></div>`
+                : `<div style="font-size: 13px; color: #666; margin-top: 6px;">👥 尚未填寫人數</div>`;
+
             div.className = `group-item ${statusClass} ${g._id === currentGroupId ? 'active' : ''}`;
             div.innerHTML = `
                 <div class="group-item-header">
@@ -624,6 +641,7 @@
                 <div class="group-item-time" onclick="window.loadGroup('${g._id}')">
                     ${g.date || '未定'} | ${g.timeStart || '--'}~${g.timeEnd || '--'} | ${g.store || '未定'}
                 </div>
+                <div onclick="window.loadGroup('${g._id}')">${summaryHtml}</div>
             `;
             return div;
         }
@@ -764,7 +782,6 @@
             await updateDoc(doc(db, "groups", groupId), { hiddenItems });
         }
 
-        // --- 智慧渲染與即時防呆更新 ---
         function renderItemSelections(group) {
             const container = document.getElementById('guest-container');
             const hiddenItems = (group.hiddenItems || []).map(String);
@@ -773,23 +790,17 @@
             let totalPeople = 0; let totalFemale = 0; let totalPrice = 0;
             let visibleItemsCount = 0;
 
-            // 1. 計算應顯示的項目數量與總數
             (globalSettings.menuItems || []).forEach(item => {
                 const itemIdStr = String(item.id);
                 if (!hiddenItems.includes(itemIdStr)) visibleItemsCount++;
             });
 
-            // 2. 判斷是否需要重新建立 DOM (避免輸入時失去焦點)
             let isRebuildNeeded = false;
-            if (container.children.length !== visibleItemsCount && visibleItemsCount > 0) {
-                isRebuildNeeded = true;
-            }
+            if (container.children.length !== visibleItemsCount && visibleItemsCount > 0) isRebuildNeeded = true;
             if (!isRebuildNeeded && visibleItemsCount > 0) {
                 (globalSettings.menuItems || []).forEach(item => {
                     const itemIdStr = String(item.id);
-                    if (!hiddenItems.includes(itemIdStr) && !document.getElementById(`row-${itemIdStr}`)) {
-                        isRebuildNeeded = true;
-                    }
+                    if (!hiddenItems.includes(itemIdStr) && !document.getElementById(`row-${itemIdStr}`)) isRebuildNeeded = true;
                 });
             }
 
@@ -801,7 +812,6 @@
                 return;
             }
 
-            // 3. 只有結構改變時才重建 DOM
             if (isRebuildNeeded) {
                 container.innerHTML = '';
                 (globalSettings.menuItems || []).forEach(item => {
@@ -836,7 +846,6 @@
                 });
             }
 
-            // 4. 更新數值並計算總和 (不會搶奪焦點)
             (globalSettings.menuItems || []).forEach(item => {
                 const itemIdStr = String(item.id);
                 if (hiddenItems.includes(itemIdStr)) return;
@@ -847,9 +856,7 @@
                 totalPrice += counts.count * (item.price || 0);
 
                 const countInput = document.getElementById(`count-${itemIdStr}`);
-                if (countInput && document.activeElement !== countInput) {
-                    countInput.value = counts.count;
-                }
+                if (countInput && document.activeElement !== countInput) countInput.value = counts.count;
 
                 const femaleInput = document.getElementById(`female-${itemIdStr}`);
                 if (femaleInput && document.activeElement !== femaleInput) {
@@ -858,7 +865,6 @@
                 }
             });
 
-            // 即時更新底部統計
             document.getElementById('sum-people').innerText = totalPeople;
             document.getElementById('sum-female').innerText = totalFemale;
             document.getElementById('sum-price').innerText = '$' + totalPrice.toLocaleString();
@@ -878,17 +884,14 @@
             }
 
             itemCounts[itemIdStr][field] = value;
-            
-            // 當總人數下修時，女師數自動連動下修
             if (field === 'count' && itemCounts[itemIdStr].femaleCount > value) {
                 itemCounts[itemIdStr].femaleCount = value;
             }
 
-            // 先在本地更新畫面，做到零延遲反饋
             group.itemCounts = itemCounts;
             renderItemSelections(group); 
-
-            // 背景寫入資料庫
+            renderGroupList(); // 即時更新左側列表數字
+            
             await updateDoc(doc(db, "groups", groupId), { itemCounts });
         };
 
