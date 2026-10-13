@@ -417,36 +417,13 @@
                     return;
                 }
 
-                // 檢查是否需要強制改密碼
-                if (dbPwd === '8888') {
-                    document.getElementById('login-box-content').innerHTML = `
-                        <h2>修改預設密碼</h2>
-                        <p style="color:#ffcc00; font-size:14px;">偵測到您使用預設密碼，為保障後台安全，請先設定新的密碼：</p>
-                        <input type="password" id="new-pwd" placeholder="請輸入新密碼 (請勿使用 8888)" required>
-                        <button class="btn-gold" onclick="window.changePassword('${nameInput}')">確認並登入</button>
-                    `;
-                    return;
-                }
-
-                // 正常登入
+                // 正常登入 (移除強制改密碼機制)
                 finalizeLogin(nameInput, true);
 
             } catch (error) {
                 console.error("Login Error:", error);
                 window.showCustomModal('系統錯誤', '無法連線到資料庫，請檢查網路連線。');
             }
-        };
-
-        window.changePassword = async (name) => {
-            const newPwd = document.getElementById('new-pwd').value;
-            if (!newPwd || newPwd === '8888') {
-                window.showCustomModal('錯誤', '新密碼不能為空或 8888，請重新輸入！');
-                return;
-            }
-            await setDoc(doc(db, "settings", "auth"), { adminPwd: newPwd });
-            window.showCustomModal('設定成功', '密碼修改完成，歡迎進入系統！', 'alert', () => {
-                finalizeLogin(name, true);
-            });
         };
 
         function finalizeLogin(name, isAdm) {
