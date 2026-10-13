@@ -244,7 +244,7 @@
         </div>
         
         <div id="sidebar-groups" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
-            <div class="new-group-btn" onclick="createNewGroup()">+ 新增團客需求單</div>
+            <div class="new-group-btn" onclick="createNewGroup()">+ 新進團客需求單</div>
             <div id="group-list"></div>
         </div>
     </div>
@@ -341,6 +341,18 @@
                 </div>
             </div>
 
+            <!-- 截圖專用標頭區塊：團客名字及日期時間 (改為靠左對齊) -->
+            <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                <div style="text-align: left;">
+                    <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
+                    <span id="ss-group-name" style="font-size: 22px; font-weight: bold; color: #fff;">載入中...</span>
+                </div>
+                <div style="text-align: left;">
+                    <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">預約日期與時間</span>
+                    <span id="ss-group-datetime" style="font-size: 18px; font-weight: bold; color: var(--accent-gold);">未定</span>
+                </div>
+            </div>
+
             <div class="card">
                 <h3>顧客服務需求填寫 <span style="font-size: 13px; color: var(--text-gray); font-weight: normal; margin-left:10px;">(於對應項目輸入人數即可)</span></h3>
                 <div id="guest-container">
@@ -351,18 +363,6 @@
             <div class="card">
                 <h3>備註事項</h3>
                 <textarea id="db-remarks" rows="4" class="auto-save" placeholder="如有其他特殊需求請填寫於此..."></textarea>
-            </div>
-
-            <!-- 截圖專用標頭區塊：團客名字及日期時間 -->
-            <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-                <div>
-                    <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
-                    <span id="ss-group-name" style="font-size: 22px; font-weight: bold; color: #fff;">載入中...</span>
-                </div>
-                <div style="text-align: right;">
-                    <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">預約日期與時間</span>
-                    <span id="ss-group-datetime" style="font-size: 18px; font-weight: bold; color: var(--accent-gold);">未定</span>
-                </div>
             </div>
 
             <div class="summary-box">
