@@ -294,6 +294,10 @@
                             <!-- Options from DB -->
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label>統一編號 (統編)</label>
+                        <input type="text" id="db-taxId" class="auto-save" placeholder="請輸入統一編號">
+                    </div>
                 </div>
 
                 <!-- 訂金繳付管理區塊 -->
@@ -347,6 +351,18 @@
             <div class="card">
                 <h3>備註事項</h3>
                 <textarea id="db-remarks" rows="4" class="auto-save" placeholder="如有其他特殊需求請填寫於此..."></textarea>
+            </div>
+
+            <!-- 截圖專用標頭區塊：團客名字及日期時間 -->
+            <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                <div>
+                    <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
+                    <span id="ss-group-name" style="font-size: 22px; font-weight: bold; color: #fff;">載入中...</span>
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">預約日期與時間</span>
+                    <span id="ss-group-datetime" style="font-size: 18px; font-weight: bold; color: var(--accent-gold);">未定</span>
+                </div>
             </div>
 
             <div class="summary-box">
@@ -603,6 +619,7 @@
             document.getElementById('db-timeEnd').readOnly = true;
             document.getElementById('db-store').disabled = true;
             document.getElementById('db-status').disabled = true;
+            document.getElementById('db-taxId').readOnly = true;
             document.getElementById('db-depositAmount').readOnly = true;
             document.getElementById('db-depositDate').readOnly = true;
             document.getElementById('db-depositMethod').disabled = true;
@@ -649,22 +666,16 @@
             if(g.status === '已確認') statusClass = 'status-confirmed';
             if(g.status === '已完成') statusClass = 'status-completed';
 
-            let totalPeople = 0;
-            let summaryText = [];
-            if (g.itemCounts) {
-                Object.keys(g.itemCounts).forEach(itemId => {
-                    const count = g.itemCounts[itemId].count || 0;
-                    if (count > 0) {
-                        totalPeople += count;
-                        const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
-                        const itemName = itemDef ? itemDef.name.split(' ')[0] : "未知項目"; 
-                        summaryText.push(`${itemName} x${count}`);
-                    }
-                });
+            // 訂金摘要
+            let depositSummary = `<span style="color:#fbc02d;">尚欠訂金</span>`;
+            if (g.depositAmount && g.depositAmount > 0) {
+                depositSummary = `<span style="color:#4caf50;">已付訂 $${Number(g.depositAmount).toLocaleString()}</span>`;
             }
-            let summaryHtml = totalPeople > 0
-                ? `<div style="font-size: 13px; color: var(--accent-gold); margin-top: 6px; line-height: 1.4;">👥 共 ${totalPeople} 人<br><span style="color: #999; font-size: 12px;">${summaryText.join('、')}</span></div>`
-                : `<div style="font-size: 13px; color: #666; margin-top: 6px;">👥 尚未填寫人數</div>`;
+
+            // 狀態顏色對應
+            let statusColor = '#fbc02d';
+            if (g.status === '已確認') statusColor = '#4caf50';
+            if (g.status === '已完成') statusColor = '#9e9e9e';
 
             div.className = `group-item ${statusClass} ${g._id === currentGroupId ? 'active' : ''}`;
             div.innerHTML = `
@@ -678,7 +689,10 @@
                 <div class="group-item-time" onclick="window.loadGroup('${g._id}')">
                     ${g.date || '未定'} | ${g.timeStart || '--'}~${g.timeEnd || '--'} | ${g.store || '未定'}
                 </div>
-                <div onclick="window.loadGroup('${g._id}')">${summaryHtml}</div>
+                <div onclick="window.loadGroup('${g._id}')" style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12px;">
+                    <div>${depositSummary}</div>
+                    <div style="font-weight: bold; color: ${statusColor};">[${g.status || '確認中'}]</div>
+                </div>
             `;
             return div;
         }
@@ -689,7 +703,7 @@
             const newGroup = {
                 name: "新團客專案", status: "確認中",
                 date: "", timeStart: "", timeEnd: "", store: "中清店",
-                depositAmount: 0, depositDate: "", depositMethod: "未選擇",
+                taxId: "", depositAmount: 0, depositDate: "", depositMethod: "未選擇",
                 remarks: "", 
                 hiddenItems: allItemIds, 
                 itemCounts: {}
@@ -740,7 +754,13 @@
             if (!data) return;
             document.getElementById('top-bar-title').innerText = isClientMode ? `填寫需求單 - ${data.name}` : `編輯專案: ${data.name}`;
             
-            const fields = ['status', 'date', 'timeStart', 'timeEnd', 'store', 'depositAmount', 'depositDate', 'depositMethod', 'remarks'];
+            // 截圖用標頭更新
+            document.getElementById('ss-group-name').innerText = data.name || '未命名專案';
+            const dateStr = data.date || '未定日期';
+            const timeStr = (data.timeStart || '--') + ' ~ ' + (data.timeEnd || '--');
+            document.getElementById('ss-group-datetime').innerText = `${dateStr}  ${timeStr}`;
+
+            const fields = ['status', 'date', 'timeStart', 'timeEnd', 'store', 'taxId', 'depositAmount', 'depositDate', 'depositMethod', 'remarks'];
             fields.forEach(f => {
                 const el = document.getElementById(`db-${f}`);
                 if (el && document.activeElement !== el) {
