@@ -281,7 +281,7 @@
                         <input type="date" id="db-date" class="auto-save">
                     </div>
                     <div class="form-group">
-                        <label>服務分店 (切換分店可設定該店時間與需求)</label>
+                        <label>服務分店 (切換分店可填寫該店時間與需求)</label>
                         <select id="active-store-selector" onchange="window.switchActiveStore(this.value)">
                             <!-- Options generated dynamically -->
                         </select>
@@ -341,7 +341,7 @@
                 </div>
             </div>
 
-            <!-- 截圖專用標頭區塊：改為上下兩行排版 -->
+            <!-- 截圖專用標頭區塊：上下兩行排版 -->
             <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                 <div style="text-align: left;">
                     <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
@@ -356,14 +356,14 @@
 
             <div class="card">
                 <h3>
-                    <span id="current-store-title">[中清店]</span> 顧客服務需求填寫 
+                    <span id="current-store-title">[載入中]</span> 顧客服務需求填寫 
                     <span style="font-size: 13px; color: var(--text-gray); font-weight: normal; margin-left:10px;">(於對應項目輸入人數即可)</span>
                 </h3>
                 <div id="guest-container">
                     <!-- Item Selection Rows -->
                 </div>
                 
-                <!-- 新增：跨店明細總覽顯示區塊 -->
+                <!-- 跨店明細總覽顯示區塊 -->
                 <div id="multi-store-summary" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid var(--border-color); display: none;">
                 </div>
             </div>
@@ -479,7 +479,7 @@
         let globalSettings = { stores: {}, menuItems: [] };
         let groupsData = {};
         let currentGroupId = null;
-        let activeStore = "中清店";
+        let activeStore = "";
 
         window.customAlert = (msg) => {
             return new Promise((resolve) => {
@@ -661,7 +661,10 @@
                 let isExpired = false;
                 let latestEndDateTime = null;
                 const storeTimes = g.storeTimes || {};
+                const hiddenStores = g.hiddenStores || [];
+                
                 Object.keys(storeTimes).forEach(sName => {
+                    if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
                     const st = storeTimes[sName];
                     if (g.date && st.timeEnd) {
                         const endDt = new Date(`${g.date}T${st.timeEnd}`);
@@ -685,12 +688,16 @@
                 const dateB = b.date || '9999-99-99';
                 if (dateA !== dateB) return dateA.localeCompare(dateB);
                 
+                const hiddenStoresA = a.hiddenStores || [];
                 const timesA = a.storeTimes || {};
-                const firstStoreA = Object.keys(timesA)[0] || '';
+                const validStoresA = Object.keys(timesA).filter(s => !hiddenStoresA.includes(s) && globalSettings.stores[s]);
+                const firstStoreA = validStoresA[0] || '';
                 const timeA = (timesA[firstStoreA] && timesA[firstStoreA].timeStart) ? timesA[firstStoreA].timeStart : '00:00';
 
+                const hiddenStoresB = b.hiddenStores || [];
                 const timesB = b.storeTimes || {};
-                const firstStoreB = Object.keys(timesB)[0] || '';
+                const validStoresB = Object.keys(timesB).filter(s => !hiddenStoresB.includes(s) && globalSettings.stores[s]);
+                const firstStoreB = validStoresB[0] || '';
                 const timeB = (timesB[firstStoreB] && timesB[firstStoreB].timeStart) ? timesB[firstStoreB].timeStart : '00:00';
 
                 return timeA.localeCompare(timeB);
@@ -727,9 +734,11 @@
             let totalPeople = 0;
             let summaryText = [];
             const multiStoreCounts = g.multiStoreItemCounts || {};
+            const hiddenStores = g.hiddenStores || [];
             let aggregatedCounts = {};
 
             Object.keys(multiStoreCounts).forEach(storeName => {
+                if (hiddenStores.includes(storeName) || !globalSettings.stores[storeName]) return;
                 const storeItems = multiStoreCounts[storeName];
                 Object.keys(storeItems).forEach(itemId => {
                     const count = storeItems[itemId].count || 0;
@@ -755,6 +764,7 @@
             let timeStrSummary = [];
             const storeTimes = g.storeTimes || {};
             Object.keys(storeTimes).forEach(sName => {
+                if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
                 const st = storeTimes[sName];
                 if (st.timeStart || st.timeEnd) {
                     timeStrSummary.push(`${sName}(${st.timeStart || '--'}~${st.timeEnd || '--'})`);
@@ -792,6 +802,7 @@
                 taxId: "", depositAmount: 0, depositDate: "", depositMethod: "未選擇",
                 remarks: "", 
                 hiddenItems: allItemIds, 
+                hiddenStores: [],
                 multiStoreItemCounts: {}
             };
             await setDoc(doc(db, "groups", newId), newGroup);
@@ -861,6 +872,13 @@
         }
 
         function loadStoreTime(group, storeName) {
+            if (!storeName) {
+                const tStartEl = document.getElementById('store-timeStart');
+                const tEndEl = document.getElementById('store-timeEnd');
+                if (tStartEl) tStartEl.value = '';
+                if (tEndEl) tEndEl.value = '';
+                return;
+            }
             const storeTimes = group.storeTimes || {};
             const st = storeTimes[storeName] || { timeStart: '', timeEnd: '' };
             const tStartEl = document.getElementById('store-timeStart');
@@ -872,8 +890,11 @@
         function updateScreenshotHeaderTime(group) {
             const dateStr = formatDateWithDay(group.date);
             const storeTimes = group.storeTimes || {};
+            const hiddenStores = group.hiddenStores || [];
             let timeStrs = [];
+            
             Object.keys(storeTimes).forEach(sName => {
+                if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
                 const st = storeTimes[sName];
                 if (st.timeStart || st.timeEnd) {
                     timeStrs.push(`• [${sName}] ${st.timeStart || '--'} ~ ${st.timeEnd || '--'}`);
@@ -912,7 +933,7 @@
 
         document.querySelectorAll('.store-time-input').forEach(el => {
             el.addEventListener('change', async (e) => {
-                if (!currentGroupId) return;
+                if (!currentGroupId || !activeStore) return;
                 const group = groupsData[currentGroupId];
                 if (!group.storeTimes) group.storeTimes = {};
                 if (!group.storeTimes[activeStore]) group.storeTimes[activeStore] = { timeStart: '', timeEnd: '' };
@@ -936,14 +957,32 @@
         function renderGroupMenuToggles(group) {
             const container = document.getElementById('group-menu-toggles');
             container.innerHTML = `
+                <div style="width:100%; color:var(--primary-green); font-size:15px; font-weight:bold; margin-top:5px; margin-bottom:5px; border-bottom:1px solid #333; padding-bottom:5px;">🏪 開放分店區 (可填寫的分店)</div>
+                <div id="toggles-stores" style="display:flex; flex-wrap:wrap; gap:10px; width:100%; margin-bottom: 15px;"></div>
                 <div style="width:100%; color:var(--primary-green); font-size:15px; font-weight:bold; margin-top:5px; margin-bottom:5px; border-bottom:1px solid #333; padding-bottom:5px;">🟢 身體項目區 (可指定女師)</div>
                 <div id="toggles-body" style="display:flex; flex-wrap:wrap; gap:10px; width:100%;"></div>
                 <div style="width:100%; color:#8d6e63; font-size:15px; font-weight:bold; margin-top:15px; margin-bottom:5px; border-bottom:1px solid #333; padding-bottom:5px;">🟤 腳底/肩頸/其他區 (無法指定女師)</div>
                 <div id="toggles-foot" style="display:flex; flex-wrap:wrap; gap:10px; width:100%;"></div>
             `;
 
-            const hiddenItems = (group.hiddenItems || []).map(String);
+            // 分店 Toggle
+            const hiddenStores = group.hiddenStores || [];
+            Object.keys(globalSettings.stores || {}).forEach(store => {
+                if (globalSettings.stores[store]) {
+                    const isHidden = hiddenStores.includes(store);
+                    const bg = isHidden ? 'var(--primary-dark)' : 'var(--primary-green)';
+                    const border = isHidden ? 'var(--border-color)' : 'var(--primary-green)';
+                    document.getElementById('toggles-stores').innerHTML += `
+                        <label style="background:${bg}; padding:8px 12px; border-radius:4px; border:1px solid ${border}; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:14px; transition:0.2s;">
+                            <input type="checkbox" onchange="window.toggleGroupStore('${group._id}', '${store}', this.checked)" ${!isHidden ? 'checked' : ''}>
+                            ${store}
+                        </label>
+                    `;
+                }
+            });
 
+            // 項目 Toggle
+            const hiddenItems = group.hiddenItems || [];
             (globalSettings.menuItems || []).forEach(item => {
                 const itemIdStr = String(item.id);
                 const isHidden = hiddenItems.includes(itemIdStr);
@@ -962,6 +1001,17 @@
                 else document.getElementById('toggles-foot').innerHTML += html;
             });
         }
+
+        window.toggleGroupStore = async (groupId, storeName, isChecked) => {
+            const group = groupsData[groupId];
+            let hiddenStores = group.hiddenStores || [];
+            if (isChecked) {
+                hiddenStores = hiddenStores.filter(s => s !== storeName);
+            } else {
+                if (!hiddenStores.includes(storeName)) hiddenStores.push(storeName);
+            }
+            await updateDoc(doc(db, "groups", groupId), { hiddenStores });
+        };
 
         window.toggleGroupMenuItem = async (groupId, itemIdStr, isChecked) => {
             const group = groupsData[groupId];
@@ -984,11 +1034,12 @@
         function renderItemSelections(group) {
             const container = document.getElementById('guest-container');
             const hiddenItems = (group.hiddenItems || []).map(String);
+            const hiddenStores = group.hiddenStores || [];
             
             const multiStoreCounts = group.multiStoreItemCounts || {};
-            const storeItemCounts = multiStoreCounts[activeStore] || {};
+            const storeItemCounts = activeStore ? (multiStoreCounts[activeStore] || {}) : {};
 
-            document.getElementById('current-store-title').innerText = `[${activeStore}]`;
+            document.getElementById('current-store-title').innerText = activeStore ? `[${activeStore}]` : '[無可用分店]';
 
             let totalPeopleAllStores = 0; 
             let totalFemaleAllStores = 0; 
@@ -1003,7 +1054,10 @@
                 if (!hiddenItems.includes(itemIdStr)) visibleItemsCount++;
             });
 
+            // 計算各分店明細與總和 (排除被隱藏或停用的店)
             Object.keys(multiStoreCounts).forEach(sName => {
+                if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
+                
                 const sItems = multiStoreCounts[sName];
                 let storeSummaryText = [];
                 let storePeople = 0;
@@ -1045,6 +1099,17 @@
                     summaryContainer.style.display = 'none';
                     summaryContainer.innerHTML = '';
                 }
+            }
+
+            if (!activeStore) {
+                container.innerHTML = `<div style="text-align:center; padding:20px; color:#aaa;">管理員尚未開放任何分店供此團客選擇。</div>`;
+                document.getElementById('sum-people').innerText = 0;
+                document.getElementById('sum-female').innerText = 0;
+                document.getElementById('sum-price').innerText = '$0';
+                document.getElementById('sum-deposit').innerText = '未繳付';
+                document.getElementById('sum-balance').innerText = '$0';
+                document.getElementById('sum-taxid').innerText = '未填寫';
+                return;
             }
 
             let isRebuildNeeded = false;
@@ -1139,7 +1204,7 @@
 
         window.updateItemCount = async (groupId, itemIdStr, field, value) => {
             const group = groupsData[groupId];
-            if (!group) return;
+            if (!group || !activeStore) return;
 
             if (!group.multiStoreItemCounts) group.multiStoreItemCounts = {};
             if (!group.multiStoreItemCounts[activeStore]) group.multiStoreItemCounts[activeStore] = {};
@@ -1177,19 +1242,26 @@
             if (!select) return;
             const currentVal = activeStore;
             select.innerHTML = '';
+            
+            const group = currentGroupId ? groupsData[currentGroupId] : null;
+            const hiddenStores = group ? (group.hiddenStores || []) : [];
+
             Object.keys(globalSettings.stores || {}).forEach(store => {
-                if (globalSettings.stores[store]) {
+                if (globalSettings.stores[store] && !hiddenStores.includes(store)) {
                     select.innerHTML += `<option value="${store}">${store}</option>`;
                 }
             });
-            if (globalSettings.stores[currentVal]) {
+
+            const availableStores = Array.from(select.options).map(o => o.value);
+            if (availableStores.length === 0) {
+                select.innerHTML = '<option value="">-- 無可用分店 --</option>';
+                activeStore = "";
+            } else if (availableStores.includes(currentVal)) {
                 select.value = currentVal;
+                activeStore = currentVal;
             } else {
-                const firstStore = Object.keys(globalSettings.stores).find(s => globalSettings.stores[s]);
-                if (firstStore) {
-                    activeStore = firstStore;
-                    select.value = firstStore;
-                }
+                activeStore = availableStores[0];
+                select.value = activeStore;
             }
         }
 
