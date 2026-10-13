@@ -152,8 +152,9 @@
             width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 4px; 
             font-size: 15px; background: var(--primary-dark); color: var(--text-light); transition: 0.2s;
         }
+        input[type="checkbox"].auto-save { width: 22px; height: 22px; margin: 0; }
         input:focus, select:focus, textarea:focus { border-color: var(--accent-gold); outline: none; }
-        input[readonly], select:disabled { background-color: rgba(255,255,255,0.05); color: #888; cursor: not-allowed; border-color: transparent;}
+        input[readonly], select:disabled, input:disabled { background-color: rgba(255,255,255,0.05); color: #888; cursor: not-allowed; border-color: transparent;}
         
         input[type="date"]::-webkit-calendar-picker-indicator,
         input[type="time"]::-webkit-calendar-picker-indicator {
@@ -302,6 +303,12 @@
 
                 <!-- 訂金繳付管理區塊 -->
                 <div class="form-row" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                    <div class="form-group" style="width: 100%; flex: none; margin-bottom: 10px;">
+                        <label style="color: #a5d6a7; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; font-size: 16px;">
+                            <input type="checkbox" id="db-useVoucher" class="auto-save">
+                            🎟️ 顧客使用票券 (勾選後免收訂金)
+                        </label>
+                    </div>
                     <div class="form-group">
                         <label style="color: var(--accent-gold);">訂金金額</label>
                         <input type="number" id="db-depositAmount" class="auto-save" placeholder="0">
@@ -341,7 +348,7 @@
                 </div>
             </div>
 
-            <!-- 截圖專用標頭區塊 -->
+            <!-- 截圖專用標頭區塊：上下兩行排版 -->
             <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                 <div style="text-align: left;">
                     <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
@@ -636,6 +643,7 @@
             document.getElementById('store-timeEnd').readOnly = true;
             document.getElementById('db-status').disabled = true;
             document.getElementById('db-taxId').readOnly = true;
+            document.getElementById('db-useVoucher').disabled = true;
             document.getElementById('db-depositAmount').readOnly = true;
             document.getElementById('db-depositDate').readOnly = true;
             document.getElementById('db-depositMethod').disabled = true;
@@ -723,7 +731,9 @@
             if(g.status === '已完成') statusClass = 'status-completed';
 
             let depositSummary = `<span style="color:#fbc02d;">尚欠訂金</span>`;
-            if (g.depositAmount && g.depositAmount > 0) {
+            if (g.useVoucher) {
+                depositSummary = `<span style="color:#4caf50;">使用票券 (免收訂)</span>`;
+            } else if (g.depositAmount && g.depositAmount > 0) {
                 depositSummary = `<span style="color:#4caf50;">已付訂 $${Number(g.depositAmount).toLocaleString()}</span>`;
             }
 
@@ -757,7 +767,7 @@
 
             let summaryHtml = totalPeople > 0
                 ? `<div style="font-size: 13px; color: var(--accent-gold); margin-top: 6px; line-height: 1.4;">👥 總共 ${totalPeople} 人<br><span style="color: #999; font-size: 12px;">${summaryText.join('、')}</span></div>`
-                : `<div style="font-size: 13px; color: #666; margin-top: 6px;">👥 尚未填寫</div>`;
+                : `<div style="font-size: 13px; color: #666; margin-top: 6px;">👥 尚未填寫人數</div>`;
 
             const formattedDate = formatDateWithDay(g.date);
             
@@ -800,6 +810,7 @@
                 name: "新團客專案", status: "確認中",
                 date: "", storeTimes: {}, 
                 taxId: "", depositAmount: 0, depositDate: "", depositMethod: "未選擇",
+                useVoucher: false,
                 remarks: "", 
                 hiddenItems: allItemIds, 
                 hiddenStores: [],
@@ -855,14 +866,29 @@
             
             updateStoreOptions();
 
-            const fields = ['status', 'date', 'taxId', 'depositAmount', 'depositDate', 'depositMethod', 'remarks'];
+            const fields = ['status', 'date', 'taxId', 'depositAmount', 'depositDate', 'depositMethod', 'remarks', 'useVoucher'];
             fields.forEach(f => {
                 const el = document.getElementById(`db-${f}`);
                 if (el && document.activeElement !== el) {
-                    el.value = data[f] || (f === 'status' ? '確認中' : (f === 'depositMethod' ? '未選擇' : ""));
+                    if (el.type === 'checkbox') {
+                        el.checked = !!data[f];
+                    } else {
+                        el.value = data[f] || (f === 'status' ? '確認中' : (f === 'depositMethod' ? '未選擇' : ""));
+                    }
                     if(f === 'status') window.updateStatusColor(el);
                 }
             });
+
+            // 根據是否使用票券，更新輸入框狀態
+            const isVoucher = !!data.useVoucher;
+            const depAmountEl = document.getElementById('db-depositAmount');
+            const depDateEl = document.getElementById('db-depositDate');
+            const depMethodEl = document.getElementById('db-depositMethod');
+            if(!isClientMode) {
+                depAmountEl.disabled = isVoucher;
+                depDateEl.disabled = isVoucher;
+                depMethodEl.disabled = isVoucher;
+            }
 
             loadStoreTime(data, activeStore);
             updateScreenshotHeaderTime(data);
@@ -919,12 +945,36 @@
             el.addEventListener('change', (e) => {
                 if (!currentGroupId) return;
                 const fieldName = e.target.id.replace('db-', '');
-                let val = e.target.value;
+                let val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
                 if (fieldName === 'depositAmount') val = parseFloat(val) || 0;
                 
                 if (fieldName === 'date' && groupsData[currentGroupId]) {
                     groupsData[currentGroupId].date = val;
                     updateScreenshotHeaderTime(groupsData[currentGroupId]);
+                }
+
+                // 若勾選使用票券，自動清空並鎖定訂金欄位
+                if (fieldName === 'useVoucher') {
+                    const depAmountEl = document.getElementById('db-depositAmount');
+                    const depDateEl = document.getElementById('db-depositDate');
+                    const depMethodEl = document.getElementById('db-depositMethod');
+                    
+                    depAmountEl.disabled = val;
+                    depDateEl.disabled = val;
+                    depMethodEl.disabled = val;
+
+                    if (val) {
+                        depAmountEl.value = 0;
+                        depDateEl.value = "";
+                        depMethodEl.value = "未選擇";
+                        updateDoc(doc(db, "groups", currentGroupId), { 
+                            useVoucher: val,
+                            depositAmount: 0,
+                            depositDate: "",
+                            depositMethod: "未選擇"
+                        });
+                        return;
+                    }
                 }
 
                 updateDoc(doc(db, "groups", currentGroupId), { [fieldName]: val });
@@ -1052,6 +1102,7 @@
                 if (!hiddenItems.includes(itemIdStr)) visibleItemsCount++;
             });
 
+            // 計算各分店明細與總和 (排除被隱藏或停用的店)
             Object.keys(multiStoreCounts).forEach(sName => {
                 if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
                 
@@ -1103,7 +1154,7 @@
                 document.getElementById('sum-people').innerText = 0;
                 document.getElementById('sum-female').innerText = 0;
                 document.getElementById('sum-price').innerText = '$0';
-                document.getElementById('sum-deposit').innerText = '未繳付';
+                document.getElementById('sum-deposit').innerText = group.useVoucher ? '使用票券 (免收訂金)' : '未繳付';
                 document.getElementById('sum-balance').innerText = '$0';
                 document.getElementById('sum-taxid').innerText = '未填寫';
                 return;
@@ -1123,7 +1174,7 @@
                 document.getElementById('sum-people').innerText = 0;
                 document.getElementById('sum-female').innerText = 0;
                 document.getElementById('sum-price').innerText = '$0';
-                document.getElementById('sum-deposit').innerText = '未繳付';
+                document.getElementById('sum-deposit').innerText = group.useVoucher ? '使用票券 (免收訂金)' : '未繳付';
                 document.getElementById('sum-balance').innerText = '$0';
                 document.getElementById('sum-taxid').innerText = '未填寫';
                 return;
@@ -1183,10 +1234,14 @@
             document.getElementById('sum-female').innerText = totalFemaleAllStores;
             document.getElementById('sum-price').innerText = '$' + totalPriceAllStores.toLocaleString();
             
+            const isVoucher = !!group.useVoucher;
             const depAmount = group.depositAmount || 0;
             const depDate = group.depositDate || '';
             const depMethod = group.depositMethod || '未選擇';
-            if (depAmount > 0) {
+            
+            if (isVoucher) {
+                document.getElementById('sum-deposit').innerHTML = `<span style="color:#4caf50;">使用票券 (免收訂金)</span>`;
+            } else if (depAmount > 0) {
                 document.getElementById('sum-deposit').innerHTML = `<span style="color:#4caf50;">已繳 $${depAmount.toLocaleString()}</span><br><span style="font-size:12px; color:#aaa;">(${depMethod} / ${depDate || '未填日期'})</span>`;
             } else {
                 document.getElementById('sum-deposit').innerHTML = `<span style="color:#fbc02d;">尚未繳付訂金</span>`;
