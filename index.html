@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>不老松 - 團客管理系統後台</title>
     
-    <!-- 核心修正：在網頁渲染前，第一時間阻斷客端的登入畫面，防止閃爍 -->
     <script>
         if (window.location.hash.length > 2) {
             document.documentElement.classList.add('is-client-loading');
@@ -33,7 +32,6 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Noto Sans TC', sans-serif; }
         body { background-color: var(--bg-dark); color: var(--text-light); display: flex; height: 100vh; overflow: hidden; }
 
-        /* 客端模式強制隱藏登入框 (阻斷閃爍) */
         html.is-client-loading #login-overlay { display: none !important; }
 
         /* Custom Modal */
@@ -163,7 +161,7 @@
 
         .notice-box { background: rgba(212, 175, 55, 0.1); border-left: 4px solid var(--accent-gold); padding: 20px; margin-bottom: 25px; border-radius: 0 4px 4px 0; font-size: 14px; line-height: 1.8; color: #ddd; }
         
-        /* Item Selection (New Structure) */
+        /* Item Selection */
         .item-selection-row {
             background: var(--primary-dark);
             border: 1px solid var(--border-color);
@@ -216,7 +214,6 @@
 </head>
 <body>
 
-    <!-- 客製化彈窗 -->
     <div id="custom-modal-overlay">
         <div class="custom-modal">
             <p id="custom-modal-msg">訊息</p>
@@ -224,7 +221,6 @@
         </div>
     </div>
 
-    <!-- 登入 Overlay -->
     <div id="login-overlay">
         <div class="login-box">
             <h2>不老松團客管理系統</h2>
@@ -233,7 +229,6 @@
         </div>
     </div>
 
-    <!-- Sidebar (Admin) -->
     <div id="sidebar">
         <div class="sidebar-header">
             <img src="logo.png" alt="不老松" onerror="this.src='https://via.placeholder.com/150x50?text=Logo'">
@@ -250,14 +245,12 @@
         </div>
     </div>
 
-    <!-- Main Content -->
     <div id="main-content">
         <div class="top-bar admin-only">
             <button class="menu-btn" onclick="toggleSidebar()">☰</button>
             <h2 id="top-bar-title">請選擇或新增專案</h2>
         </div>
 
-        <!-- 團客專案視圖 -->
         <div id="view-group" class="view-section">
             <div class="notice-box">
                 <strong>【服務流程建議】</strong><br>
@@ -304,7 +297,6 @@
                 </div>
             </div>
             
-            <!-- 客端可選項目設定 (僅管理員可見) -->
             <div class="card admin-only">
                 <h3>
                     客端開放選擇項目設定
@@ -343,7 +335,6 @@
             </div>
         </div>
 
-        <!-- 系統設定視圖 (僅管理員) -->
         <div id="view-settings" class="view-section admin-only">
             <div class="card">
                 <h3>分店開放設定</h3>
@@ -491,7 +482,6 @@
             }
         }
 
-        // 監聽網址改變 (防止同一頁面修改 hash 沒有重載)
         window.addEventListener('hashchange', () => { window.location.reload(); });
 
         document.getElementById('login-pwd').addEventListener('keypress', function (e) {
@@ -535,7 +525,10 @@
             if (!isClientMode) {
                 onSnapshot(collection(db, "groups"), (snapshot) => {
                     groupsData = {};
-                    snapshot.forEach(doc => { groupsData[doc.id] = doc.data(); });
+                    snapshot.forEach(doc => { 
+                        groupsData[doc.id] = doc.data(); 
+                        groupsData[doc.id]._id = doc.id; // 確保管理員模式綁定 ID
+                    });
                     renderGroupList();
                 });
             } else {
@@ -545,6 +538,7 @@
                         if (docSnap.exists()) {
                             document.getElementById('view-group').classList.add('active'); 
                             groupsData[clientGroupId] = docSnap.data();
+                            groupsData[clientGroupId]._id = clientGroupId; // ★ 核心修復：確保客端模式綁定 ID
                             renderGroupData(groupsData[clientGroupId]);
                             lockClientFields();
                             checkDateAlert(groupsData[clientGroupId].date);
@@ -584,7 +578,7 @@
             const now = new Date();
 
             Object.keys(groupsData).forEach(id => {
-                const g = groupsData[id]; g._id = id;
+                const g = groupsData[id];
                 let isExpired = false;
                 if (g.date && g.timeEnd) {
                     const endDateTime = new Date(`${g.date}T${g.timeEnd}`);
@@ -651,11 +645,13 @@
         window.loadGroup = (id) => {
             currentGroupId = id;
             switchAdminTab('groups');
-            renderGroupList();
-            document.getElementById('view-group').classList.add('active');
-            const baseUrl = window.location.href.split('#')[0];
-            document.getElementById('g-share-url').value = `${baseUrl}#${id}`;
-            renderGroupData(groupsData[id]);
+            if(groupsData[id]) {
+                renderGroupList();
+                document.getElementById('view-group').classList.add('active');
+                const baseUrl = window.location.href.split('#')[0];
+                document.getElementById('g-share-url').value = `${baseUrl}#${id}`;
+                renderGroupData(groupsData[id]);
+            }
         };
 
         window.editGroupName = async (e, id) => {
@@ -768,55 +764,101 @@
             await updateDoc(doc(db, "groups", groupId), { hiddenItems });
         }
 
+        // --- 智慧渲染與即時防呆更新 ---
         function renderItemSelections(group) {
             const container = document.getElementById('guest-container');
-            container.innerHTML = '';
-            
-            let totalPeople = 0; let totalFemale = 0; let totalPrice = 0;
             const hiddenItems = (group.hiddenItems || []).map(String);
             const itemCounts = group.itemCounts || {};
+            
+            let totalPeople = 0; let totalFemale = 0; let totalPrice = 0;
             let visibleItemsCount = 0;
 
+            // 1. 計算應顯示的項目數量與總數
+            (globalSettings.menuItems || []).forEach(item => {
+                const itemIdStr = String(item.id);
+                if (!hiddenItems.includes(itemIdStr)) visibleItemsCount++;
+            });
+
+            // 2. 判斷是否需要重新建立 DOM (避免輸入時失去焦點)
+            let isRebuildNeeded = false;
+            if (container.children.length !== visibleItemsCount && visibleItemsCount > 0) {
+                isRebuildNeeded = true;
+            }
+            if (!isRebuildNeeded && visibleItemsCount > 0) {
+                (globalSettings.menuItems || []).forEach(item => {
+                    const itemIdStr = String(item.id);
+                    if (!hiddenItems.includes(itemIdStr) && !document.getElementById(`row-${itemIdStr}`)) {
+                        isRebuildNeeded = true;
+                    }
+                });
+            }
+
+            if (visibleItemsCount === 0) {
+                container.innerHTML = `<div style="text-align:center; padding:20px; color:#aaa;">管理員尚未開放任何服務項目供此團客選擇。</div>`;
+                document.getElementById('sum-people').innerText = 0;
+                document.getElementById('sum-female').innerText = 0;
+                document.getElementById('sum-price').innerText = '$0';
+                return;
+            }
+
+            // 3. 只有結構改變時才重建 DOM
+            if (isRebuildNeeded) {
+                container.innerHTML = '';
+                (globalSettings.menuItems || []).forEach(item => {
+                    const itemIdStr = String(item.id);
+                    if (hiddenItems.includes(itemIdStr)) return;
+
+                    const isBody = item.type === 'body';
+                    const row = document.createElement('div');
+                    row.id = `row-${itemIdStr}`;
+                    row.className = 'item-selection-row';
+                    row.innerHTML = `
+                        <div class="item-name">${item.name} <span style="color:var(--accent-gold); font-size:14px; margin-left:10px;">$${item.price}</span></div>
+                        <div class="item-inputs">
+                            <div class="input-group">
+                                <label>人數</label>
+                                <input type="number" id="count-${itemIdStr}" min="0" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'count', parseInt(this.value)||0)">
+                            </div>
+                            ${isBody ? `
+                            <div class="input-group">
+                                <label style="color:var(--text-light);">女師</label>
+                                <input type="number" id="female-${itemIdStr}" min="0" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'femaleCount', parseInt(this.value)||0)">
+                            </div>
+                            ` : `
+                            <div class="input-group" style="opacity: 0.3;">
+                                <label>女師</label>
+                                <input type="number" disabled value="0" style="cursor:not-allowed;" title="此項目無法指定女師">
+                            </div>
+                            `}
+                        </div>
+                    `;
+                    container.appendChild(row);
+                });
+            }
+
+            // 4. 更新數值並計算總和 (不會搶奪焦點)
             (globalSettings.menuItems || []).forEach(item => {
                 const itemIdStr = String(item.id);
                 if (hiddenItems.includes(itemIdStr)) return;
 
-                visibleItemsCount++;
                 const counts = itemCounts[itemIdStr] || { count: 0, femaleCount: 0 };
                 totalPeople += counts.count;
                 totalFemale += counts.femaleCount;
                 totalPrice += counts.count * (item.price || 0);
-                const isBody = item.type === 'body';
 
-                const row = document.createElement('div');
-                row.className = 'item-selection-row';
-                row.innerHTML = `
-                    <div class="item-name">${item.name} <span style="color:var(--accent-gold); font-size:14px; margin-left:10px;">$${item.price}</span></div>
-                    <div class="item-inputs">
-                        <div class="input-group">
-                            <label>人數</label>
-                            <input type="number" min="0" value="${counts.count}" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'count', parseInt(this.value)||0)">
-                        </div>
-                        ${isBody ? `
-                        <div class="input-group">
-                            <label style="color:var(--text-light);">女師</label>
-                            <input type="number" min="0" max="${counts.count}" value="${counts.femaleCount}" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'femaleCount', parseInt(this.value)||0)">
-                        </div>
-                        ` : `
-                        <div class="input-group" style="opacity: 0.3;">
-                            <label>女師</label>
-                            <input type="number" disabled value="0" style="cursor:not-allowed;" title="此項目無法指定女師">
-                        </div>
-                        `}
-                    </div>
-                `;
-                container.appendChild(row);
+                const countInput = document.getElementById(`count-${itemIdStr}`);
+                if (countInput && document.activeElement !== countInput) {
+                    countInput.value = counts.count;
+                }
+
+                const femaleInput = document.getElementById(`female-${itemIdStr}`);
+                if (femaleInput && document.activeElement !== femaleInput) {
+                    femaleInput.value = counts.femaleCount;
+                    femaleInput.max = counts.count;
+                }
             });
 
-            if (visibleItemsCount === 0) {
-                container.innerHTML = `<div style="text-align:center; padding:20px; color:#aaa;">管理員尚未開放任何服務項目供此團客選擇。</div>`;
-            }
-
+            // 即時更新底部統計
             document.getElementById('sum-people').innerText = totalPeople;
             document.getElementById('sum-female').innerText = totalFemale;
             document.getElementById('sum-price').innerText = '$' + totalPrice.toLocaleString();
@@ -824,6 +866,8 @@
 
         window.updateItemCount = async (groupId, itemIdStr, field, value) => {
             const group = groupsData[groupId];
+            if (!group) return;
+
             const itemCounts = group.itemCounts || {};
             if (!itemCounts[itemIdStr]) itemCounts[itemIdStr] = { count: 0, femaleCount: 0 };
             
@@ -834,10 +878,17 @@
             }
 
             itemCounts[itemIdStr][field] = value;
+            
+            // 當總人數下修時，女師數自動連動下修
             if (field === 'count' && itemCounts[itemIdStr].femaleCount > value) {
                 itemCounts[itemIdStr].femaleCount = value;
             }
 
+            // 先在本地更新畫面，做到零延遲反饋
+            group.itemCounts = itemCounts;
+            renderItemSelections(group); 
+
+            // 背景寫入資料庫
             await updateDoc(doc(db, "groups", groupId), { itemCounts });
         };
 
