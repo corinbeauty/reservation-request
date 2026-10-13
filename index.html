@@ -6,7 +6,8 @@
     <title>不老松團客管理系統</title>
     
     <script>
-        if (window.location.hash.length > 2) {
+        const initHash = window.location.hash.substring(1);
+        if (initHash === 'check' || initHash.length > 2) {
             document.documentElement.classList.add('is-client-loading');
         }
     </script>
@@ -829,10 +830,10 @@
                 if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
                 const st = storeTimes[sName];
                 if (st.timeStart || st.timeEnd) {
-                    timeStrSummary.push(`[${sName}] ${st.timeStart || '--'}~${st.timeEnd || '--'}`);
+                    timeStrSummary.push(`⏱️ [${sName}] ${st.timeStart || '--'}~${st.timeEnd || '--'}`);
                 }
             });
-            const timeDisplay = timeStrSummary.length > 0 ? timeStrSummary.join('<br>') : '時間未定';
+            const timeDisplay = timeStrSummary.length > 0 ? timeStrSummary.join('<br>') : '⏱️ 時間未定';
 
             let badgeHtml = index ? `<span style="background: var(--accent-gold); color: var(--bg-dark); width: 36px; height: 36px; display: inline-flex; justify-content: center; align-items: center; border-radius: 50%; font-weight: 900; margin-right: 12px; font-size: 18px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);">${index}</span>` : '';
 
@@ -846,7 +847,7 @@
                 </div>
                 <div style="font-size: 14px; color: #a5d6a7; margin-bottom: 15px; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
                     <div style="margin-bottom: 4px;">📅 <b>${formattedDate}</b></div>
-                    <div>⏱️ ${timeDisplay}</div>
+                    <div>${timeDisplay}</div>
                 </div>
                 <div style="background: var(--primary-dark); padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid var(--border-color);">
                     ${summaryHtml}
