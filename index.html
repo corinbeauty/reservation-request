@@ -135,7 +135,6 @@
         }
         .top-bar h2 { font-size: 18px; font-weight: normal; color: var(--accent-gold); }
         
-        /* Client Top Bar (Logo) */
         .client-header { display: none; text-align: center; padding: 15px; background: var(--secondary-dark); border-bottom: 1px solid var(--border-color); }
         .client-header img { max-height: 55px; object-fit: contain; }
         
@@ -194,7 +193,7 @@
         .summary-box { background: var(--primary-dark); border: 1px solid var(--accent-gold); padding: 25px; border-radius: 8px; margin-top: 25px; display: flex; justify-content: space-around; text-align: center; flex-wrap: wrap; gap: 15px;}
         .summary-item { flex: 1; min-width: 120px; }
         .summary-item h4 { color: var(--text-gray); font-size: 14px; margin-bottom: 10px; font-weight: normal;}
-        .summary-item span { font-size: 32px; font-weight: bold; color: var(--accent-gold); }
+        .summary-item span { font-size: 26px; font-weight: bold; color: var(--accent-gold); }
 
         .status-select { font-weight: bold; }
         .status-select.s-pending { color: var(--status-pending); border-color: var(--status-pending); }
@@ -269,7 +268,7 @@
 
             <div class="card" id="group-basic-info">
                 <div class="form-row">
-                    <div class="form-group admin-only">
+                    <div class="form-group">
                         <label>專案狀態</label>
                         <select id="db-status" class="auto-save status-select" onchange="window.updateStatusColor(this)">
                             <option value="確認中">確認中</option>
@@ -293,6 +292,28 @@
                         <label>服務分店</label>
                         <select id="db-store" class="auto-save">
                             <!-- Options from DB -->
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 訂金繳付管理區塊 -->
+                <div class="form-row" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                    <div class="form-group">
+                        <label style="color: var(--accent-gold);">訂金金額</label>
+                        <input type="number" id="db-depositAmount" class="auto-save" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label style="color: var(--accent-gold);">訂金繳付日期</label>
+                        <input type="date" id="db-depositDate" class="auto-save">
+                    </div>
+                    <div class="form-group">
+                        <label style="color: var(--accent-gold);">訂金繳付方式</label>
+                        <select id="db-depositMethod" class="auto-save">
+                            <option value="未選擇">-- 請選擇方式 --</option>
+                            <option value="現金">現金</option>
+                            <option value="轉帳">轉帳</option>
+                            <option value="Line Pay">Line Pay</option>
+                            <option value="刷卡">刷卡</option>
                         </select>
                     </div>
                 </div>
@@ -340,6 +361,10 @@
                 <div class="summary-item">
                     <h4>預估總費用</h4>
                     <span id="sum-price">$0</span>
+                </div>
+                <div class="summary-item">
+                    <h4>訂金繳付狀態</h4>
+                    <span id="sum-deposit" style="font-size: 20px; color: var(--accent-gold);">未繳付</span>
                 </div>
             </div>
         </div>
@@ -577,6 +602,10 @@
             document.getElementById('db-timeStart').readOnly = true;
             document.getElementById('db-timeEnd').readOnly = true;
             document.getElementById('db-store').disabled = true;
+            document.getElementById('db-status').disabled = true;
+            document.getElementById('db-depositAmount').readOnly = true;
+            document.getElementById('db-depositDate').readOnly = true;
+            document.getElementById('db-depositMethod').disabled = true;
         }
 
         function renderGroupList() {
@@ -660,6 +689,7 @@
             const newGroup = {
                 name: "新團客專案", status: "確認中",
                 date: "", timeStart: "", timeEnd: "", store: "中清店",
+                depositAmount: 0, depositDate: "", depositMethod: "未選擇",
                 remarks: "", 
                 hiddenItems: allItemIds, 
                 itemCounts: {}
@@ -710,11 +740,11 @@
             if (!data) return;
             document.getElementById('top-bar-title').innerText = isClientMode ? `填寫需求單 - ${data.name}` : `編輯專案: ${data.name}`;
             
-            const fields = ['status', 'date', 'timeStart', 'timeEnd', 'store', 'remarks'];
+            const fields = ['status', 'date', 'timeStart', 'timeEnd', 'store', 'depositAmount', 'depositDate', 'depositMethod', 'remarks'];
             fields.forEach(f => {
                 const el = document.getElementById(`db-${f}`);
                 if (el && document.activeElement !== el) {
-                    el.value = data[f] || (f === 'status' ? '確認中' : "");
+                    el.value = data[f] || (f === 'status' ? '確認中' : (f === 'depositMethod' ? '未選擇' : ""));
                     if(f === 'status') window.updateStatusColor(el);
                 }
             });
@@ -734,7 +764,9 @@
             el.addEventListener('change', (e) => {
                 if (!currentGroupId) return;
                 const fieldName = e.target.id.replace('db-', '');
-                updateDoc(doc(db, "groups", currentGroupId), { [fieldName]: e.target.value });
+                let val = e.target.value;
+                if (fieldName === 'depositAmount') val = parseFloat(val) || 0;
+                updateDoc(doc(db, "groups", currentGroupId), { [fieldName]: val });
             });
         });
 
@@ -817,6 +849,7 @@
                 document.getElementById('sum-people').innerText = 0;
                 document.getElementById('sum-female').innerText = 0;
                 document.getElementById('sum-price').innerText = '$0';
+                document.getElementById('sum-deposit').innerText = '未繳付';
                 return;
             }
 
@@ -876,6 +909,16 @@
             document.getElementById('sum-people').innerText = totalPeople;
             document.getElementById('sum-female').innerText = totalFemale;
             document.getElementById('sum-price').innerText = '$' + totalPrice.toLocaleString();
+            
+            // 顯示訂金狀態於底部統計
+            const depAmount = group.depositAmount || 0;
+            const depDate = group.depositDate || '';
+            const depMethod = group.depositMethod || '未選擇';
+            if (depAmount > 0) {
+                document.getElementById('sum-deposit').innerHTML = `<span style="color:#4caf50;">已繳 $${depAmount.toLocaleString()}</span><br><span style="font-size:12px; color:#aaa;">(${depMethod} / ${depDate || '未填日期'})</span>`;
+            } else {
+                document.getElementById('sum-deposit').innerHTML = `<span style="color:#fbc02d;">尚未繳付訂金</span>`;
+            }
         }
 
         window.updateItemCount = async (groupId, itemIdStr, field, value) => {
