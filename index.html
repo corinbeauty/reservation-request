@@ -6,9 +6,7 @@
     <title>不老松團客管理系統</title>
     
     <script>
-        // 核心修正：在網頁渲染前，第一時間阻斷客端與看板模式的登入畫面，防止閃爍
-        const initHash = window.location.hash.substring(1);
-        if (initHash === 'check' || initHash.length > 2) {
+        if (window.location.hash.length > 2) {
             document.documentElement.classList.add('is-client-loading');
         }
     </script>
@@ -440,7 +438,7 @@
         <div id="view-check" class="view-section" style="max-width: 1400px;">
             <div style="text-align: center; margin-bottom: 30px;">
                 <img src="logo.png" alt="不老松" style="max-height: 70px;" onerror="this.src='https://via.placeholder.com/150x50?text=Logo'">
-                <h2 style="color: var(--accent-gold); margin-top: 15px; letter-spacing: 2px;">現場預約資訊看板</h2>
+                <h2 style="color: var(--accent-gold); margin-top: 15px; letter-spacing: 2px;">團客預約資訊看板</h2>
             </div>
             
             <div id="check-list-active" style="display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); margin-bottom: 50px;">
@@ -771,14 +769,14 @@
             listActive.innerHTML = '';
             listCompleted.innerHTML = '';
 
-            activeGroups.forEach(g => listActive.appendChild(createCheckCard(g)));
-            completedGroups.forEach(g => listCompleted.appendChild(createCheckCard(g)));
+            activeGroups.forEach((g, index) => listActive.appendChild(createCheckCard(g, index + 1)));
+            completedGroups.forEach((g, index) => listCompleted.appendChild(createCheckCard(g, index + 1)));
             
             if(activeGroups.length === 0) listActive.innerHTML = '<div style="color:#aaa;">目前無進行中專案</div>';
             if(completedGroups.length === 0) listCompleted.innerHTML = '<div style="color:#aaa;">目前無歷史專案</div>';
         }
 
-        function createCheckCard(g) {
+        function createCheckCard(g, index) {
             const div = document.createElement('div');
             div.className = 'card';
             div.style.marginBottom = '0';
@@ -836,9 +834,14 @@
             });
             const timeDisplay = timeStrSummary.length > 0 ? timeStrSummary.join('<br>') : '時間未定';
 
+            let badgeHtml = index ? `<span style="background: var(--accent-gold); color: var(--bg-dark); width: 36px; height: 36px; display: inline-flex; justify-content: center; align-items: center; border-radius: 50%; font-weight: 900; margin-right: 12px; font-size: 18px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);">${index}</span>` : '';
+
             div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
-                    <span style="font-size: 18px; font-weight: bold; color: var(--text-light); line-height: 1.3;">${g.name || '未命名專案'}</span>
+                    <div style="display: flex; align-items: center;">
+                        ${badgeHtml}
+                        <span style="font-size: 18px; font-weight: bold; color: var(--text-light); line-height: 1.3;">${g.name || '未命名專案'}</span>
+                    </div>
                     <span style="font-size: 14px; font-weight: bold; color: ${statusColor}; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; white-space: nowrap; margin-left: 10px;">${g.status || '確認中'}</span>
                 </div>
                 <div style="font-size: 14px; color: #a5d6a7; margin-bottom: 15px; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
@@ -1248,6 +1251,7 @@
                 if (!hiddenItems.includes(itemIdStr)) visibleItemsCount++;
             });
 
+            // 計算各分店明細與總和 (排除被隱藏或停用的店)
             Object.keys(multiStoreCounts).forEach(sName => {
                 if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
                 
