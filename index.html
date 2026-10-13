@@ -814,7 +814,7 @@
 
             Object.keys(aggregatedCounts).forEach(itemId => {
                 const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
-                const itemName = itemDef ? itemDef.name.split(' ')[0] : "未知";
+                const itemName = itemDef ? itemDef.name : "未知";
                 summaryText.push(`${itemName} x${aggregatedCounts[itemId]}`);
             });
 
@@ -913,7 +913,7 @@
 
             Object.keys(aggregatedCounts).forEach(itemId => {
                 const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
-                const itemName = itemDef ? itemDef.name.split(' ')[0] : "未知";
+                const itemName = itemDef ? itemDef.name : "未知";
                 summaryText.push(`${itemName} x${aggregatedCounts[itemId]}`);
             });
 
