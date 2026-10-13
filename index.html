@@ -178,7 +178,8 @@
         .btn-action { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; color: white; background: var(--primary-green); font-size: 14px;}
         .btn-danger { background: rgba(244, 67, 54, 0.1); color: #ef5350; border: 1px solid rgba(244, 67, 54, 0.3); }
         
-        .summary-box { background: var(--primary-dark); border: 1px solid var(--accent-gold); padding: 25px; border-radius: 8px; margin-top: 25px; display: flex; justify-content: space-around; text-align: center; }
+        .summary-box { background: var(--primary-dark); border: 1px solid var(--accent-gold); padding: 25px; border-radius: 8px; margin-top: 25px; display: flex; justify-content: space-around; text-align: center; flex-wrap: wrap; gap: 15px;}
+        .summary-item { flex: 1; min-width: 120px; }
         .summary-item h4 { color: var(--text-gray); font-size: 14px; margin-bottom: 10px; font-weight: normal;}
         .summary-item span { font-size: 32px; font-weight: bold; color: var(--accent-gold); }
 
@@ -324,6 +325,10 @@
                     <h4>指定女師需求</h4>
                     <span id="sum-female">0</span>
                 </div>
+                <div class="summary-item">
+                    <h4>預估總費用</h4>
+                    <span id="sum-price">$0</span>
+                </div>
             </div>
         </div>
 
@@ -365,7 +370,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 完整照片菜單資料字典 (已確保所有肩頸、腳底、修腳皆為 foot 類型)
+        // 完整照片菜單資料字典
         const photoDefaultMenu = [
             { id: 1, name: "運動筋膜刀肩頸按摩 (30分)", price: 800, type: "foot" },
             { id: 2, name: "運動筋膜刀腳底按摩 (40分)", price: 1200, type: "foot" },
@@ -403,14 +408,12 @@
             { id: 34, name: "修腳指甲", price: 600, type: "foot" }
         ];
 
-        // Global State
         let isClientMode = false;
         let clientGroupId = null; 
         let globalSettings = { stores: {}, menuItems: [] };
         let groupsData = {};
         let currentGroupId = null;
 
-        // --- 客製化彈窗系統 ---
         window.customAlert = (msg) => {
             return new Promise((resolve) => {
                 document.getElementById('custom-modal-msg').innerHTML = msg;
@@ -418,8 +421,7 @@
                 btns.innerHTML = `<button class="btn-modal-confirm" id="modal-btn-ok">了解</button>`;
                 document.getElementById('custom-modal-overlay').style.display = 'flex';
                 document.getElementById('modal-btn-ok').onclick = () => {
-                    document.getElementById('custom-modal-overlay').style.display = 'none';
-                    resolve(true);
+                    document.getElementById('custom-modal-overlay').style.display = 'none'; resolve(true);
                 };
             });
         };
@@ -465,7 +467,6 @@
             });
         };
 
-        // --- 初始化 ---
         function initApp() {
             const hash = window.location.hash.substring(1);
             if (hash && hash.length > 5) {
@@ -488,15 +489,13 @@
             if (mode === 'admin') {
                 const pwd = document.getElementById('login-pwd').value;
                 if (pwd !== '8888') {
-                    await window.customAlert('密碼錯誤！請重新輸入。');
-                    return;
+                    await window.customAlert('密碼錯誤！請重新輸入。'); return;
                 }
                 document.getElementById('login-overlay').style.display = 'none';
                 startDatabaseSync();
             }
         };
 
-        // --- 資料庫同步 ---
         function startDatabaseSync() {
             onSnapshot(doc(db, "settings", "global"), (docSnap) => {
                 let shouldForceUpdate = false;
@@ -544,7 +543,6 @@
             }
         }
 
-        // 客端提醒
         let alertShown = false;
         async function checkDateAlert(bookDateStr) {
             if (!bookDateStr || alertShown || !isClientMode) return;
@@ -566,7 +564,6 @@
             document.getElementById('db-store').disabled = true;
         }
 
-        // --- 介面渲染與資料寫入 ---
         function renderGroupList() {
             const list = document.getElementById('group-list');
             list.innerHTML = '';
@@ -626,7 +623,6 @@
 
         window.createNewGroup = async () => {
             const newId = Date.now().toString(); 
-            // 預設將所有項目的 ID 放入 hiddenItems，代表全部不勾選(不開放)
             const allItemIds = globalSettings.menuItems.map(m => String(m.id));
             const newGroup = {
                 name: "新團客專案", status: "確認中",
@@ -680,261 +676,4 @@
             document.getElementById('top-bar-title').innerText = isClientMode ? `填寫需求單 - ${data.name}` : `編輯專案: ${data.name}`;
             
             const fields = ['status', 'date', 'timeStart', 'timeEnd', 'store', 'remarks'];
-            fields.forEach(f => {
-                const el = document.getElementById(`db-${f}`);
-                if (el && document.activeElement !== el) {
-                    el.value = data[f] || (f === 'status' ? '確認中' : "");
-                    if(f === 'status') window.updateStatusColor(el);
-                }
-            });
-
-            if (!isClientMode) renderGroupMenuToggles(data);
-            renderItemSelections(data);
-        }
-
-        window.updateStatusColor = (selectEl) => {
-            selectEl.className = 'auto-save status-select';
-            if(selectEl.value === '確認中') selectEl.classList.add('s-pending');
-            if(selectEl.value === '已確認') selectEl.classList.add('s-confirmed');
-            if(selectEl.value === '已完成') selectEl.classList.add('s-completed');
-        };
-
-        document.querySelectorAll('.auto-save').forEach(el => {
-            el.addEventListener('change', (e) => {
-                if (!currentGroupId) return;
-                const fieldName = e.target.id.replace('db-', '');
-                updateDoc(doc(db, "groups", currentGroupId), {
-                    [fieldName]: e.target.value
-                });
-            });
-        });
-
-        window.copyShareUrl = async () => {
-            const url = document.getElementById('g-share-url').value;
-            navigator.clipboard.writeText(url).then(async () => {
-                await window.customAlert('專屬網址已複製！請傳送給客人填寫。');
-            });
-        };
-
-        // --- 專案專屬選單設定 (Admin) 視覺分類版 ---
-        function renderGroupMenuToggles(group) {
-            const container = document.getElementById('group-menu-toggles');
-            container.innerHTML = `
-                <div style="width:100%; color:var(--primary-green); font-size:15px; font-weight:bold; margin-top:5px; margin-bottom:5px; border-bottom:1px solid #333; padding-bottom:5px;">🟢 身體項目區 (可指定女師)</div>
-                <div id="toggles-body" style="display:flex; flex-wrap:wrap; gap:10px; width:100%;"></div>
-                <div style="width:100%; color:#8d6e63; font-size:15px; font-weight:bold; margin-top:15px; margin-bottom:5px; border-bottom:1px solid #333; padding-bottom:5px;">🟤 腳底/肩頸/其他區 (無法指定女師)</div>
-                <div id="toggles-foot" style="display:flex; flex-wrap:wrap; gap:10px; width:100%;"></div>
-            `;
-
-            const hiddenItems = (group.hiddenItems || []).map(String);
-
-            (globalSettings.menuItems || []).forEach(item => {
-                const itemIdStr = String(item.id);
-                const isHidden = hiddenItems.includes(itemIdStr);
-                const isBody = item.type === 'body';
-                
-                const bg = isHidden ? 'var(--primary-dark)' : 'var(--primary-green)';
-                const border = isHidden ? 'var(--border-color)' : 'var(--primary-green)';
-                
-                const html = `
-                    <label style="background:${bg}; padding:8px 12px; border-radius:4px; border:1px solid ${border}; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:14px; transition:0.2s;">
-                        <input type="checkbox" onchange="window.toggleGroupMenuItem('${group._id}', '${itemIdStr}', this.checked)" ${!isHidden ? 'checked' : ''}>
-                        ${item.name}
-                    </label>
-                `;
-                if(isBody) {
-                    document.getElementById('toggles-body').innerHTML += html;
-                } else {
-                    document.getElementById('toggles-foot').innerHTML += html;
-                }
-            });
-        }
-
-        window.toggleGroupMenuItem = async (groupId, itemIdStr, isChecked) => {
-            const group = groupsData[groupId];
-            let hiddenItems = (group.hiddenItems || []).map(String);
-            if (isChecked) {
-                hiddenItems = hiddenItems.filter(id => id !== itemIdStr);
-            } else {
-                if (!hiddenItems.includes(itemIdStr)) hiddenItems.push(itemIdStr);
-                if (group.itemCounts && group.itemCounts[itemIdStr]) {
-                    group.itemCounts[itemIdStr] = { count: 0, femaleCount: 0 };
-                    await updateDoc(doc(db, "groups", groupId), { itemCounts: group.itemCounts });
-                }
-            }
-            await updateDoc(doc(db, "groups", groupId), { hiddenItems });
-        }
-
-        // --- 客端選擇區塊渲染 ---
-        function renderItemSelections(group) {
-            const container = document.getElementById('guest-container');
-            container.innerHTML = '';
-            
-            let totalPeople = 0;
-            let totalFemale = 0;
-            const hiddenItems = (group.hiddenItems || []).map(String);
-            const itemCounts = group.itemCounts || {};
-
-            let visibleItemsCount = 0;
-
-            (globalSettings.menuItems || []).forEach(item => {
-                const itemIdStr = String(item.id);
-                if (hiddenItems.includes(itemIdStr)) return; // 隱藏的就不顯示
-
-                visibleItemsCount++;
-                const counts = itemCounts[itemIdStr] || { count: 0, femaleCount: 0 };
-                totalPeople += counts.count;
-                totalFemale += counts.femaleCount;
-                const isBody = item.type === 'body';
-
-                const row = document.createElement('div');
-                row.className = 'item-selection-row';
-                row.innerHTML = `
-                    <div class="item-name">${item.name} <span style="color:var(--accent-gold); font-size:14px; margin-left:10px;">$${item.price}</span></div>
-                    <div class="item-inputs">
-                        <div class="input-group">
-                            <label>人數</label>
-                            <input type="number" min="0" value="${counts.count}" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'count', parseInt(this.value)||0)">
-                        </div>
-                        ${isBody ? `
-                        <div class="input-group">
-                            <label style="color:var(--text-light);">女師</label>
-                            <input type="number" min="0" max="${counts.count}" value="${counts.femaleCount}" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'femaleCount', parseInt(this.value)||0)">
-                        </div>
-                        ` : `
-                        <div class="input-group" style="opacity: 0.3;">
-                            <label>女師</label>
-                            <input type="number" disabled value="0" style="cursor:not-allowed;" title="此項目無法指定女師">
-                        </div>
-                        `}
-                    </div>
-                `;
-                container.appendChild(row);
-            });
-
-            if (visibleItemsCount === 0) {
-                container.innerHTML = `<div style="text-align:center; padding:20px; color:#aaa;">管理員尚未開放任何服務項目供此團客選擇。</div>`;
-            }
-
-            document.getElementById('sum-people').innerText = totalPeople;
-            document.getElementById('sum-female').innerText = totalFemale;
-        }
-
-        window.updateItemCount = async (groupId, itemIdStr, field, value) => {
-            const group = groupsData[groupId];
-            const itemCounts = group.itemCounts || {};
-            if (!itemCounts[itemIdStr]) itemCounts[itemIdStr] = { count: 0, femaleCount: 0 };
-            
-            if (value < 0) value = 0;
-            if (field === 'femaleCount' && value > itemCounts[itemIdStr].count) {
-                value = itemCounts[itemIdStr].count;
-                window.customAlert("指定女師人數不能超過該項目的總人數喔！");
-            }
-
-            itemCounts[itemIdStr][field] = value;
-            
-            // 當總人數減少低於女師數時，連動下修女師數
-            if (field === 'count' && itemCounts[itemIdStr].femaleCount > value) {
-                itemCounts[itemIdStr].femaleCount = value;
-            }
-
-            await updateDoc(doc(db, "groups", groupId), { itemCounts });
-        };
-
-        // --- 系統設定更新 ---
-        function updateStoreOptions() {
-            const select = document.getElementById('db-store');
-            const currentVal = select.value;
-            select.innerHTML = '<option value="">-- 請選擇分店 --</option>';
-            
-            Object.keys(globalSettings.stores || {}).forEach(store => {
-                if (globalSettings.stores[store]) {
-                    select.innerHTML += `<option value="${store}">${store}</option>`;
-                }
-            });
-            if (currentVal) select.value = currentVal;
-        }
-
-        function renderAdminSettings() {
-            const sContainer = document.getElementById('store-settings-container');
-            sContainer.innerHTML = '';
-            Object.keys(globalSettings.stores).forEach(store => {
-                const isChecked = globalSettings.stores[store];
-                const isDefault = (store === '中清店');
-                sContainer.innerHTML += `
-                    <div class="setting-item">
-                        <span style="color:var(--text-light); font-size:15px;">${store}</span>
-                        <label style="margin:0; cursor:pointer;">
-                            <input type="checkbox" onchange="window.updateStoreSetting('${store}', this.checked)"
-                            ${isChecked ? 'checked' : ''} ${isDefault ? 'disabled' : ''}> 啟用
-                        </label>
-                    </div>
-                `;
-            });
-
-            const mContainer = document.getElementById('menu-settings-container');
-            mContainer.innerHTML = '';
-            (globalSettings.menuItems || []).forEach((item, index) => {
-                mContainer.innerHTML += `
-                    <div class="menu-edit-row">
-                        <input type="text" placeholder="項目名稱" value="${item.name}" onchange="window.updateMenuItem(${index}, 'name', this.value)">
-                        <input type="number" placeholder="價格" value="${item.price}" onchange="window.updateMenuItem(${index}, 'price', parseInt(this.value))">
-                        <select onchange="window.updateMenuItem(${index}, 'type', this.value)">
-                            <option value="body" ${item.type === 'body' ? 'selected' : ''}>身體 (可指定女師)</option>
-                            <option value="foot" ${item.type === 'foot' ? 'selected' : ''}>腳底/其他 (鎖定女師)</option>
-                        </select>
-                        <button class="btn-action btn-danger" onclick="window.removeMenuItem(${index})">刪除</button>
-                    </div>
-                `;
-            });
-        }
-
-        window.updateStoreSetting = async (store, isOpen) => {
-            const newStores = { ...globalSettings.stores, [store]: isOpen };
-            await updateDoc(doc(db, "settings", "global"), { stores: newStores });
-        };
-
-        window.addMenuItem = async () => {
-            const items = [...(globalSettings.menuItems || [])];
-            items.push({ id: Date.now(), name: "新項目", price: 0, type: "body" });
-            await updateDoc(doc(db, "settings", "global"), { menuItems: items });
-        };
-
-        window.updateMenuItem = async (index, field, value) => {
-            const items = [...(globalSettings.menuItems || [])];
-            items[index][field] = value;
-            await updateDoc(doc(db, "settings", "global"), { menuItems: items });
-        };
-
-        window.removeMenuItem = async (index) => {
-            const confirmDel = await window.customConfirm('確定移除此項目？<br><span style="font-size:12px; color:#aaa;">(不會影響歷史訂單)</span>');
-            if(confirmDel) {
-                const items = [...(globalSettings.menuItems || [])];
-                items.splice(index, 1);
-                await updateDoc(doc(db, "settings", "global"), { menuItems: items });
-            }
-        };
-
-        // --- UI 操作 ---
-        window.switchAdminTab = (tab) => {
-            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav-buttons button').forEach(el => el.classList.remove('active'));
-            
-            if (tab === 'groups') {
-                document.getElementById('btn-tab-groups').classList.add('active');
-                if (currentGroupId) document.getElementById('view-group').classList.add('active');
-            } else if (tab === 'settings') {
-                document.getElementById('btn-tab-settings').classList.add('active');
-                document.getElementById('view-settings').classList.add('active');
-            }
-            if(window.innerWidth <= 768) document.getElementById('sidebar').classList.add('collapsed');
-        };
-
-        window.toggleSidebar = () => {
-            document.getElementById('sidebar').classList.toggle('collapsed');
-        };
-
-        window.onload = initApp;
-    </script>
-</body>
-</html>
+            fields
