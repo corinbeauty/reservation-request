@@ -341,15 +341,16 @@
                 </div>
             </div>
 
-            <!-- 截圖專用標頭區塊：團客名字及日期時間 (含星期) -->
-            <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+            <!-- 截圖專用標頭區塊：改為上下兩行排版 -->
+            <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                 <div style="text-align: left;">
                     <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
                     <span id="ss-group-name" style="font-size: 22px; font-weight: bold; color: #fff;">載入中...</span>
                 </div>
+                <div style="width: 100%; height: 1px; background: rgba(212, 175, 55, 0.3);"></div>
                 <div style="text-align: left;">
-                    <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">預約日期與時間</span>
-                    <span id="ss-group-datetime" style="font-size: 18px; font-weight: bold; color: var(--accent-gold);">未定</span>
+                    <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px; margin-bottom: 3px;">預約日期與時間 (各店明細)</span>
+                    <span id="ss-group-datetime" style="font-size: 16px; font-weight: bold; color: var(--accent-gold); line-height: 1.5; display: block;">未定</span>
                 </div>
             </div>
 
@@ -360,6 +361,10 @@
                 </h3>
                 <div id="guest-container">
                     <!-- Item Selection Rows -->
+                </div>
+                
+                <!-- 新增：跨店明細總覽顯示區塊 -->
+                <div id="multi-store-summary" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid var(--border-color); display: none;">
                 </div>
             </div>
 
@@ -474,7 +479,7 @@
         let globalSettings = { stores: {}, menuItems: [] };
         let groupsData = {};
         let currentGroupId = null;
-        let activeStore = "中清店"; // 當前畫面上檢視/填寫的分店
+        let activeStore = "中清店";
 
         window.customAlert = (msg) => {
             return new Promise((resolve) => {
@@ -654,8 +659,6 @@
             Object.keys(groupsData).forEach(id => {
                 const g = groupsData[id];
                 let isExpired = false;
-                
-                // 檢查是否跨店過期：取所有分店中最晚的時間
                 let latestEndDateTime = null;
                 const storeTimes = g.storeTimes || {};
                 Object.keys(storeTimes).forEach(sName => {
@@ -682,7 +685,6 @@
                 const dateB = b.date || '9999-99-99';
                 if (dateA !== dateB) return dateA.localeCompare(dateB);
                 
-                // 取第一家店的時間來排序
                 const timesA = a.storeTimes || {};
                 const firstStoreA = Object.keys(timesA)[0] || '';
                 const timeA = (timesA[firstStoreA] && timesA[firstStoreA].timeStart) ? timesA[firstStoreA].timeStart : '00:00';
@@ -750,7 +752,6 @@
 
             const formattedDate = formatDateWithDay(g.date);
             
-            // 組合顯示各店時間
             let timeStrSummary = [];
             const storeTimes = g.storeTimes || {};
             Object.keys(storeTimes).forEach(sName => {
@@ -852,10 +853,7 @@
                 }
             });
 
-            // 載入當前分店的時間
             loadStoreTime(data, activeStore);
-
-            // 更新截圖標頭的時間顯示
             updateScreenshotHeaderTime(data);
 
             if (!isClientMode) renderGroupMenuToggles(data);
@@ -878,11 +876,15 @@
             Object.keys(storeTimes).forEach(sName => {
                 const st = storeTimes[sName];
                 if (st.timeStart || st.timeEnd) {
-                    timeStrs.push(`${sName}: ${st.timeStart || '--'}~${st.timeEnd || '--'}`);
+                    timeStrs.push(`• [${sName}] ${st.timeStart || '--'} ~ ${st.timeEnd || '--'}`);
                 }
             });
-            const timeDisplay = timeStrs.length > 0 ? timeStrs.join(' | ') : '時間未定';
-            document.getElementById('ss-group-datetime').innerText = `${dateStr}  |  ${timeDisplay}`;
+            const timeDisplay = timeStrs.length > 0 ? timeStrs.join('<br>') : '尚無各店時間紀錄';
+            
+            document.getElementById('ss-group-datetime').innerHTML = `
+                <div style="margin-bottom: 4px; color: #fff;">日期：${dateStr}</div>
+                <div style="font-size: 15px; color: var(--accent-gold); line-height: 1.6;">${timeDisplay}</div>
+            `;
         }
 
         window.updateStatusColor = (selectEl) => {
@@ -892,18 +894,22 @@
             if(selectEl.value === '已完成') selectEl.classList.add('s-completed');
         };
 
-        // 一般欄位變更監聽
         document.querySelectorAll('.auto-save').forEach(el => {
             el.addEventListener('change', (e) => {
                 if (!currentGroupId) return;
                 const fieldName = e.target.id.replace('db-', '');
                 let val = e.target.value;
                 if (fieldName === 'depositAmount') val = parseFloat(val) || 0;
+                
+                if (fieldName === 'date' && groupsData[currentGroupId]) {
+                    groupsData[currentGroupId].date = val;
+                    updateScreenshotHeaderTime(groupsData[currentGroupId]);
+                }
+
                 updateDoc(doc(db, "groups", currentGroupId), { [fieldName]: val });
             });
         });
 
-        // 分店時間變更監聽
         document.querySelectorAll('.store-time-input').forEach(el => {
             el.addEventListener('change', async (e) => {
                 if (!currentGroupId) return;
@@ -988,6 +994,9 @@
             let totalFemaleAllStores = 0; 
             let totalPriceAllStores = 0;
             let visibleItemsCount = 0;
+            
+            let multiStoreSummaryHtml = '';
+            let activeStoreCount = 0;
 
             (globalSettings.menuItems || []).forEach(item => {
                 const itemIdStr = String(item.id);
@@ -996,16 +1005,47 @@
 
             Object.keys(multiStoreCounts).forEach(sName => {
                 const sItems = multiStoreCounts[sName];
+                let storeSummaryText = [];
+                let storePeople = 0;
+
                 Object.keys(sItems).forEach(itemId => {
                     const counts = sItems[itemId] || { count: 0, femaleCount: 0 };
-                    totalPeopleAllStores += counts.count;
-                    totalFemaleAllStores += counts.femaleCount;
-                    const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
-                    if (itemDef) {
-                        totalPriceAllStores += counts.count * (itemDef.price || 0);
+                    if (counts.count > 0) {
+                        totalPeopleAllStores += counts.count;
+                        totalFemaleAllStores += counts.femaleCount;
+                        const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
+                        if (itemDef) {
+                            totalPriceAllStores += counts.count * (itemDef.price || 0);
+                            storePeople += counts.count;
+                            const itemName = itemDef.name.split(' ')[0];
+                            let txt = `${itemName} x${counts.count}`;
+                            if (counts.femaleCount > 0) txt += `(女師x${counts.femaleCount})`;
+                            storeSummaryText.push(txt);
+                        }
                     }
                 });
+
+                if (storePeople > 0) {
+                    activeStoreCount++;
+                    multiStoreSummaryHtml += `
+                        <div style="margin-bottom: 8px; font-size: 14px;">
+                            <span style="color: #a5d6a7; font-weight: bold; margin-right: 8px;">[${sName}]</span>
+                            <span style="color: var(--text-light);">${storeSummaryText.join('、')}</span>
+                        </div>
+                    `;
+                }
             });
+
+            const summaryContainer = document.getElementById('multi-store-summary');
+            if (summaryContainer) {
+                if (activeStoreCount > 0) {
+                    summaryContainer.style.display = 'block';
+                    summaryContainer.innerHTML = `<div style="color: var(--text-gray); font-size: 13px; margin-bottom: 10px;">📋 各分店明細總覽：</div>${multiStoreSummaryHtml}`;
+                } else {
+                    summaryContainer.style.display = 'none';
+                    summaryContainer.innerHTML = '';
+                }
+            }
 
             let isRebuildNeeded = false;
             if (container.children.length !== visibleItemsCount && visibleItemsCount > 0) isRebuildNeeded = true;
