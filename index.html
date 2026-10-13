@@ -6,7 +6,9 @@
     <title>不老松團客管理系統</title>
     
     <script>
-        if (window.location.hash.length > 2) {
+        // 核心修正：在網頁渲染前，第一時間阻斷客端與看板模式的登入畫面，防止閃爍
+        const initHash = window.location.hash.substring(1);
+        if (initHash === 'check' || initHash.length > 2) {
             document.documentElement.classList.add('is-client-loading');
         }
     </script>
@@ -201,12 +203,19 @@
         .status-select.s-confirmed { color: var(--status-confirmed); border-color: var(--status-confirmed); }
         .status-select.s-completed { color: var(--status-completed); border-color: var(--status-completed); }
 
+        /* Client Mode CSS */
         .client-mode #sidebar { display: none !important; }
         .client-mode #main-content { margin-left: 0; }
         .client-mode .admin-only { display: none !important; }
         .client-mode body { background-color: var(--secondary-dark); }
         .client-mode .client-header { display: block !important; }
         
+        /* Check Mode CSS (現場看板) */
+        .check-mode #sidebar { display: none !important; }
+        .check-mode .top-bar { display: none !important; }
+        .check-mode #main-content { margin-left: 0; padding-top: 20px;}
+        .check-mode body { background-color: var(--bg-dark); }
+
         @media (max-width: 768px) {
             #sidebar { position: absolute; height: 100%; box-shadow: 5px 0 20px rgba(0,0,0,0.5); }
             .top-bar { padding: 15px; }
@@ -260,6 +269,7 @@
             <h2 id="top-bar-title">請選擇或新增專案</h2>
         </div>
 
+        <!-- 一般管理/填寫視圖 -->
         <div id="view-group" class="view-section">
             <div class="notice-box">
                 <strong>【服務流程建議】</strong><br>
@@ -348,7 +358,7 @@
                 </div>
             </div>
 
-            <!-- 截圖專用標頭區塊：上下兩行排版 -->
+            <!-- 截圖專用標頭區塊 -->
             <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                 <div style="text-align: left;">
                     <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
@@ -425,6 +435,24 @@
                 <button class="btn-action" onclick="addMenuItem()" style="margin-top: 10px; background: transparent; border: 1px solid var(--accent-gold); color: var(--accent-gold);">+ 手動新增一筆</button>
             </div>
         </div>
+
+        <!-- Check 模式 (現場看板視圖) -->
+        <div id="view-check" class="view-section" style="max-width: 1400px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <img src="logo.png" alt="不老松" style="max-height: 70px;" onerror="this.src='https://via.placeholder.com/150x50?text=Logo'">
+                <h2 style="color: var(--accent-gold); margin-top: 15px; letter-spacing: 2px;">現場預約資訊看板</h2>
+            </div>
+            
+            <div id="check-list-active" style="display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); margin-bottom: 50px;">
+                <!-- Active Cards -->
+            </div>
+            
+            <h3 style="color: var(--text-gray); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 20px;">已完成 / 歷史紀錄</h3>
+            <div id="check-list-completed" style="display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); opacity: 0.6;">
+                <!-- Completed Cards -->
+            </div>
+        </div>
+
     </div>
 
     <script type="module">
@@ -482,6 +510,7 @@
         ];
 
         let isClientMode = false;
+        let isCheckMode = false;
         let clientGroupId = null; 
         let globalSettings = { stores: {}, menuItems: [] };
         let groupsData = {};
@@ -543,7 +572,14 @@
 
         function initApp() {
             const hash = window.location.hash.substring(1);
-            if (hash && hash.length > 2) {
+            if (hash === 'check') {
+                isCheckMode = true;
+                document.body.classList.add('check-mode');
+                document.getElementById('login-overlay').style.display = 'none';
+                document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+                document.getElementById('view-check').classList.add('active');
+                startDatabaseSync();
+            } else if (hash && hash.length > 2) {
                 isClientMode = true;
                 clientGroupId = hash;
                 document.body.classList.add('client-mode');
@@ -590,19 +626,29 @@
                 }
                 if (shouldForceUpdate) setDoc(doc(db, "settings", "global"), globalSettings);
 
-                if (!isClientMode) renderAdminSettings();
-                updateStoreOptions();
-                if (currentGroupId && groupsData[currentGroupId]) renderGroupData(groupsData[currentGroupId]); 
+                if (isCheckMode) {
+                    renderCheckList();
+                } else if (!isClientMode) {
+                    renderAdminSettings();
+                    updateStoreOptions();
+                    if (currentGroupId && groupsData[currentGroupId]) renderGroupData(groupsData[currentGroupId]); 
+                } else {
+                    updateStoreOptions();
+                }
             });
 
-            if (!isClientMode) {
+            if (isCheckMode || !isClientMode) {
                 onSnapshot(collection(db, "groups"), (snapshot) => {
                     groupsData = {};
                     snapshot.forEach(doc => { 
                         groupsData[doc.id] = doc.data(); 
                         groupsData[doc.id]._id = doc.id;
                     });
-                    renderGroupList();
+                    if (isCheckMode) {
+                        renderCheckList();
+                    } else {
+                        renderGroupList();
+                    }
                 });
             } else {
                 if (clientGroupId) {
@@ -658,9 +704,7 @@
             return `${dateStr} (${dayName})`;
         }
 
-        function renderGroupList() {
-            const list = document.getElementById('group-list');
-            list.innerHTML = '';
+        function getSortedGroups() {
             let activeGroups = []; let completedGroups = [];
             const now = new Date();
 
@@ -713,6 +757,110 @@
 
             activeGroups.sort(timeSortFn); 
             completedGroups.sort(timeSortFn);
+            return { activeGroups, completedGroups };
+        }
+
+        // ====== 現場看板專用渲染邏輯 ======
+        function renderCheckList() {
+            const { activeGroups, completedGroups } = getSortedGroups();
+            const listActive = document.getElementById('check-list-active');
+            const listCompleted = document.getElementById('check-list-completed');
+            
+            if(!listActive || !listCompleted) return;
+            
+            listActive.innerHTML = '';
+            listCompleted.innerHTML = '';
+
+            activeGroups.forEach(g => listActive.appendChild(createCheckCard(g)));
+            completedGroups.forEach(g => listCompleted.appendChild(createCheckCard(g)));
+            
+            if(activeGroups.length === 0) listActive.innerHTML = '<div style="color:#aaa;">目前無進行中專案</div>';
+            if(completedGroups.length === 0) listCompleted.innerHTML = '<div style="color:#aaa;">目前無歷史專案</div>';
+        }
+
+        function createCheckCard(g) {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.style.marginBottom = '0';
+            
+            let statusColor = '#fbc02d';
+            if (g.status === '已確認') statusColor = '#4caf50';
+            if (g.status === '已完成') statusColor = '#9e9e9e';
+            div.style.borderTopColor = statusColor;
+
+            let depositSummary = `<span style="color:#fbc02d;">尚欠訂金</span>`;
+            if (g.useVoucher) {
+                depositSummary = `<span style="color:#4caf50;">使用票券 (免收訂)</span>`;
+            } else if (g.depositAmount && g.depositAmount > 0) {
+                depositSummary = `<span style="color:#4caf50;">已付訂 $${Number(g.depositAmount).toLocaleString()}</span>`;
+            }
+
+            let totalPeople = 0;
+            let summaryText = [];
+            const multiStoreCounts = g.multiStoreItemCounts || {};
+            const hiddenStores = g.hiddenStores || [];
+            let aggregatedCounts = {};
+
+            Object.keys(multiStoreCounts).forEach(storeName => {
+                if (hiddenStores.includes(storeName) || !globalSettings.stores[storeName]) return;
+                const storeItems = multiStoreCounts[storeName];
+                Object.keys(storeItems).forEach(itemId => {
+                    const count = storeItems[itemId].count || 0;
+                    if (count > 0) {
+                        totalPeople += count;
+                        aggregatedCounts[itemId] = (aggregatedCounts[itemId] || 0) + count;
+                    }
+                });
+            });
+
+            Object.keys(aggregatedCounts).forEach(itemId => {
+                const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
+                const itemName = itemDef ? itemDef.name.split(' ')[0] : "未知";
+                summaryText.push(`${itemName} x${aggregatedCounts[itemId]}`);
+            });
+
+            let summaryHtml = totalPeople > 0
+                ? `<div style="font-size: 15px; color: var(--accent-gold); margin-bottom: 8px; font-weight: bold;">👥 總共 ${totalPeople} 人</div><div style="color: #eee; font-size: 14px; line-height: 1.6;">${summaryText.join('<br>')}</div>`
+                : `<div style="font-size: 15px; color: #666;">👥 尚未填寫人數</div>`;
+
+            const formattedDate = formatDateWithDay(g.date);
+            
+            let timeStrSummary = [];
+            const storeTimes = g.storeTimes || {};
+            Object.keys(storeTimes).forEach(sName => {
+                if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
+                const st = storeTimes[sName];
+                if (st.timeStart || st.timeEnd) {
+                    timeStrSummary.push(`[${sName}] ${st.timeStart || '--'}~${st.timeEnd || '--'}`);
+                }
+            });
+            const timeDisplay = timeStrSummary.length > 0 ? timeStrSummary.join('<br>') : '時間未定';
+
+            div.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                    <span style="font-size: 18px; font-weight: bold; color: var(--text-light); line-height: 1.3;">${g.name || '未命名專案'}</span>
+                    <span style="font-size: 14px; font-weight: bold; color: ${statusColor}; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; white-space: nowrap; margin-left: 10px;">${g.status || '確認中'}</span>
+                </div>
+                <div style="font-size: 14px; color: #a5d6a7; margin-bottom: 15px; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
+                    <div style="margin-bottom: 4px;">📅 <b>${formattedDate}</b></div>
+                    <div>⏱️ ${timeDisplay}</div>
+                </div>
+                <div style="background: var(--primary-dark); padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid var(--border-color);">
+                    ${summaryHtml}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 12px;">
+                    <div>💰 ${depositSummary}</div>
+                    ${g.taxId ? `<div style="color: #aaa;">🧾 統編: ${g.taxId}</div>` : ''}
+                </div>
+            `;
+            return div;
+        }
+        // ===================================
+
+        function renderGroupList() {
+            const list = document.getElementById('group-list');
+            list.innerHTML = '';
+            const { activeGroups, completedGroups } = getSortedGroups();
 
             if (activeGroups.length > 0) {
                 list.innerHTML += `<div class="list-section-title">進行中專案</div>`;
@@ -879,7 +1027,6 @@
                 }
             });
 
-            // 根據是否使用票券，更新輸入框狀態
             const isVoucher = !!data.useVoucher;
             const depAmountEl = document.getElementById('db-depositAmount');
             const depDateEl = document.getElementById('db-depositDate');
@@ -953,7 +1100,6 @@
                     updateScreenshotHeaderTime(groupsData[currentGroupId]);
                 }
 
-                // 若勾選使用票券，自動清空並鎖定訂金欄位
                 if (fieldName === 'useVoucher') {
                     const depAmountEl = document.getElementById('db-depositAmount');
                     const depDateEl = document.getElementById('db-depositDate');
@@ -1102,7 +1248,6 @@
                 if (!hiddenItems.includes(itemIdStr)) visibleItemsCount++;
             });
 
-            // 計算各分店明細與總和 (排除被隱藏或停用的店)
             Object.keys(multiStoreCounts).forEach(sName => {
                 if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
                 
