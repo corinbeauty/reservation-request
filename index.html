@@ -341,7 +341,7 @@
                 </div>
             </div>
 
-            <!-- 截圖專用標頭區塊：團客名字及日期時間 (改為靠左對齊) -->
+            <!-- 截圖專用標頭區塊：團客名字及日期時間 (含星期) -->
             <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                 <div style="text-align: left;">
                     <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
@@ -633,6 +633,16 @@
             document.getElementById('db-depositMethod').disabled = true;
         }
 
+        // 輔助函式：取得格式化日期與星期
+        function formatDateWithDay(dateStr) {
+            if (!dateStr) return '未定日期';
+            const days = ['日', '一', '二', '三', '四', '五', '六'];
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return dateStr;
+            const dayName = days[d.getDay()];
+            return `${dateStr} (${dayName})`;
+        }
+
         function renderGroupList() {
             const list = document.getElementById('group-list');
             list.innerHTML = '';
@@ -655,8 +665,18 @@
                 } else { activeGroups.push(g); }
             });
 
-            const sortFn = (a, b) => (b.date || '0').localeCompare(a.date || '0');
-            activeGroups.sort(sortFn); completedGroups.sort(sortFn);
+            // 嚴謹的時間先後排序 (日期 + 時間起)
+            const timeSortFn = (a, b) => {
+                const dateA = a.date || '9999-99-99';
+                const dateB = b.date || '9999-99-99';
+                if (dateA !== dateB) return dateA.localeCompare(dateB);
+                const timeA = a.timeStart || '00:00';
+                const timeB = b.timeStart || '00:00';
+                return timeA.localeCompare(timeB);
+            };
+
+            activeGroups.sort(timeSortFn); 
+            completedGroups.sort(timeSortFn);
 
             if (activeGroups.length > 0) {
                 list.innerHTML += `<div class="list-section-title">進行中專案</div>`;
@@ -700,6 +720,8 @@
                 ? `<div style="font-size: 13px; color: var(--accent-gold); margin-top: 6px; line-height: 1.4;">👥 共 ${totalPeople} 人<br><span style="color: #999; font-size: 12px;">${summaryText.join('、')}</span></div>`
                 : `<div style="font-size: 13px; color: #666; margin-top: 6px;">👥 尚未填寫人數</div>`;
 
+            const formattedDate = formatDateWithDay(g.date);
+
             div.className = `group-item ${statusClass} ${g._id === currentGroupId ? 'active' : ''}`;
             div.innerHTML = `
                 <div class="group-item-header">
@@ -710,7 +732,7 @@
                     </div>
                 </div>
                 <div class="group-item-time" onclick="window.loadGroup('${g._id}')">
-                    ${g.date || '未定'} | ${g.timeStart || '--'}~${g.timeEnd || '--'} | ${g.store || '未定'}
+                    ${formattedDate} | ${g.timeStart || '--'}~${g.timeEnd || '--'} | ${g.store || '未定'}
                 </div>
                 <div onclick="window.loadGroup('${g._id}')">${summaryHtml}</div>
                 <div onclick="window.loadGroup('${g._id}')" style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 5px;">
@@ -779,7 +801,7 @@
             document.getElementById('top-bar-title').innerText = isClientMode ? `填寫需求單 - ${data.name}` : `編輯專案: ${data.name}`;
             
             document.getElementById('ss-group-name').innerText = data.name || '未命名專案';
-            const dateStr = data.date || '未定日期';
+            const dateStr = formatDateWithDay(data.date);
             const timeStr = (data.timeStart || '--') + ' ~ ' + (data.timeEnd || '--');
             document.getElementById('ss-group-datetime').innerText = `${dateStr}  ${timeStr}`;
 
@@ -964,11 +986,9 @@
                 document.getElementById('sum-deposit').innerHTML = `<span style="color:#fbc02d;">尚未繳付訂金</span>`;
             }
 
-            // 計算尾款餘額
             const balance = totalPrice - depAmount;
             document.getElementById('sum-balance').innerText = '$' + balance.toLocaleString();
 
-            // 顯示統一編號
             const taxId = group.taxId || '';
             document.getElementById('sum-taxid').innerText = taxId ? taxId : '未填寫';
         }
