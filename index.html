@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>不老松團客管理系統</title>
+    <title>不老松 - 團客管理系統</title>
+    <meta property="og:title" content="不老松 - 團客管理系統">
     
     <script>
         const initHash = window.location.hash.substring(1);
@@ -357,7 +358,7 @@
                 </div>
             </div>
 
-            <!-- 截圖專用標頭區塊 -->
+            <!-- 截圖專用標頭區塊：上下兩行排版 -->
             <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                 <div style="text-align: left;">
                     <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
@@ -1269,7 +1270,7 @@
                         if (itemDef) {
                             totalPriceAllStores += counts.count * (itemDef.price || 0);
                             storePeople += counts.count;
-                            const itemName = itemDef.name.split(' ')[0];
+                            const itemName = itemDef.name;
                             let txt = `${itemName} x${counts.count}`;
                             if (counts.femaleCount > 0) txt += `(需求女師x${counts.femaleCount})`;
                             storeSummaryText.push(txt);
