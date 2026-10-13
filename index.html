@@ -49,15 +49,36 @@
         input[type="checkbox"] {
             accent-color: #D4AF37;
         }
+
+        /* 側邊欄收折效果 */
+        .sidebar-transition {
+            transition: margin-left 0.3s ease-in-out;
+        }
+        .sidebar-collapsed {
+            margin-left: -16rem; /* 隱藏 w-64 (16rem) */
+        }
+        
+        /* 行動裝置側邊欄為絕對定位覆蓋 */
+        @media (max-width: 768px) {
+            .sidebar-absolute {
+                position: absolute;
+                height: 100%;
+                z-index: 50;
+            }
+        }
     </style>
 </head>
-<body class="h-screen flex overflow-hidden">
+<body class="h-screen flex overflow-hidden relative">
 
-    <aside class="w-64 bg-pine-dark border-r border-pine-green flex flex-col h-full flex-shrink-0 z-10 shadow-2xl">
+    <aside id="sidebar" class="w-64 bg-pine-dark border-r border-pine-green flex flex-col h-full flex-shrink-0 z-40 shadow-2xl sidebar-transition sidebar-absolute">
         <!-- Logo 區塊 -->
-        <div class="p-4 flex flex-col items-center justify-center border-b border-pine-green">
-            <img src="1000039073.png" alt="不老松 Logo" class="w-32 h-32 object-contain drop-shadow-md rounded-full bg-black">
-            <h1 class="text-gold font-bold text-xl mt-3 tracking-widest">團客需求管理</h1>
+        <div class="p-4 flex flex-col items-center justify-center border-b border-pine-green relative">
+            <button onclick="toggleSidebar(false)" class="md:hidden absolute top-4 right-4 text-gray-400 hover:text-white p-2">
+                <i class="fas fa-times"></i>
+            </button>
+            <!-- 更新 Logo 圖片來源，若 logo.png 找不到則回退使用原始圖片 -->
+            <img src="logo.png" onerror="this.src='1000039073.png'" alt="不老松 Logo" class="w-28 h-28 object-contain drop-shadow-md rounded-full bg-black/50">
+            <h1 class="text-gold font-bold text-lg mt-3 tracking-widest">團客需求管理</h1>
         </div>
 
         <!-- 頁籤列表 -->
@@ -73,17 +94,53 @@
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col h-full relative overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
+    <main class="flex-1 flex flex-col h-full relative overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] w-full">
+        
+        <!-- 頂部導覽列 -->
+        <header class="h-14 bg-pine-dark/90 backdrop-blur border-b border-pine-green flex items-center justify-between px-4 shrink-0 z-10 shadow-md">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="text-gold hover:text-gold-light text-xl p-2 rounded hover:bg-pine-green transition" title="收折/展開選單">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <span id="top-title" class="text-gold font-bold tracking-wider">系統載入中...</span>
+            </div>
+            <div id="share-container" class="hidden flex items-center">
+                <button onclick="copyShareLink()" class="flex items-center gap-2 bg-pine-light hover:bg-pine-green text-white px-3 py-1.5 rounded text-sm transition shadow border border-pine-green">
+                    <i class="fas fa-link"></i> <span class="hidden sm:inline">複製專屬連結</span>
+                </button>
+            </div>
+        </header>
+
         <!-- 內容容器 -->
         <div id="main-content" class="flex-1 overflow-y-auto p-6 lg:p-10 no-scrollbar">
             <!-- 動態生成內容 -->
         </div>
     </main>
 
-    <script>
-        // 菜單資料庫 (依據 1000039132.jpg 建立)
-        // type: 'body' (身體, 可選女師), 'foot' (腳底/局部, 不可選女師)
-        const menuData = [
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 用戶提供的 Firebase 設定檔
+        const firebaseConfig = {
+            apiKey: "AIzaSyCdwtBsj7wOM9jPprztsq8xx21yeKswt0Q",
+            authDomain: "mtsb-1c6f4.firebaseapp.com",
+            projectId: "mtsb-1c6f4",
+            storageBucket: "mtsb-1c6f4.firebasestorage.app",
+            messagingSenderId: "171768683975",
+            appId: "1:171768683975:web:6fe5b2a07ec7d853494de2",
+            measurementId: "G-NMDDF1QLYZ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const sysAppId = "bulao_song_system"; // 資料庫儲存空間代號
+
+        let menuData = [
             { category: '運動筋膜刀按摩', items: [
                 { id: 'f_m_1', name: '肩頸按摩 30分', price: 800, type: 'foot', active: true },
                 { id: 'f_m_2', name: '腳底按摩 40分', price: 1200, type: 'foot', active: true },
@@ -118,54 +175,196 @@
             ]}
         ];
 
-        // 應用程式狀態
         let state = {
-            currentTab: 'admin', // 'admin' 或 group id
-            // 新增分店設定
+            currentTab: '',
+            isAdminAuth: false,
+            isSidebarOpen: window.innerWidth > 768,
             stores: [
                 { id: 'store_qc', name: '中清店 (臺中市北區中清路一段856號)', active: true, isDefault: true },
                 { id: 'store_zg', name: '中港店 (臺中市西區臺灣大道二段157號)', active: false, isDefault: false },
                 { id: 'store_zk', name: '中科店 (臺中市西屯區永福路170號)', active: false, isDefault: false }
             ],
-            groups: [
-                {
-                    id: 'group_' + Date.now(),
-                    name: '雄獅旅遊 - A團',
-                    date: '',
-                    time: '',
-                    storeId: 'store_qc', // 新增分店ID記錄
-                    guests: []
-                }
-            ]
+            groups: [] // 將由 Firebase 接管
         };
+
+        // 因為改為 module 寫法，HTML 上的 onclick 需要綁定到 window 才能觸發
+        window.toggleSidebar = toggleSidebar;
+        window.copyShareLink = copyShareLink;
+        window.switchTab = switchTab;
+        window.addGroup = addGroup;
+        window.deleteGroup = deleteGroup;
+        window.updateGroupName = updateGroupName;
+        window.updateGroupStore = updateGroupStore;
+        window.updateGroupDate = updateGroupDate;
+        window.updateGroupTimeStart = updateGroupTimeStart;
+        window.updateGroupTimeEnd = updateGroupTimeEnd;
+        window.updateItemName = updateItemName;
+        window.updateItemPrice = updateItemPrice;
+        window.addGuest = addGuest;
+        window.removeGuest = removeGuest;
+        window.updateGuestName = updateGuestName;
+        window.updateGuestService = updateGuestService;
+        window.updateGuestFemaleReq = updateGuestFemaleReq;
+        window.showPasswordModal = showPasswordModal;
+        window.closePasswordModal = closePasswordModal;
+        window.verifyPassword = verifyPassword;
+        window.toggleMenuItem = toggleMenuItem;
+        window.toggleStoreItem = toggleStoreItem;
+
+        let isAppReady = false;
+        let isAdminLoaded = false;
+        let isGroupsLoaded = false;
+
+        async function initApp() {
+            try {
+                // 必須使用 Firebase Auth 才能存取資料庫 (匿名登入)
+                await signInAnonymously(auth);
+                
+                // 1. 監聽管理員設定 (菜單與分店開關)
+                const settingsRef = doc(db, 'artifacts', sysAppId, 'public', 'data', 'settings', 'admin');
+                onSnapshot(settingsRef, (snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.data();
+                        if (data.menuData) menuData = data.menuData;
+                        if (data.stores) state.stores = data.stores;
+                    } else {
+                        // 初次建立資料庫預設值
+                        saveAdminSettings();
+                    }
+                    isAdminLoaded = true;
+                    checkAppReady();
+                    if(isAppReady) render();
+                }, (error) => console.error("設定載入失敗", error));
+
+                // 2. 監聽所有團客資料 (即時同步)
+                const groupsRef = collection(db, 'artifacts', sysAppId, 'public', 'data', 'groups');
+                onSnapshot(groupsRef, (snapshot) => {
+                    state.groups = [];
+                    snapshot.forEach(doc => {
+                        state.groups.push(doc.data());
+                    });
+                    
+                    // 根據日期或建立時間排序(可選)，這邊以預設為主
+                    isGroupsLoaded = true;
+                    checkAppReady();
+                    if(isAppReady) render();
+                }, (error) => console.error("團客資料載入失敗", error));
+
+            } catch (error) {
+                console.error("Firebase 連線或登入失敗:", error);
+                document.getElementById('top-title').textContent = "連線失敗，請檢查網路或 Firebase Auth 設定";
+            }
+        }
+
+        function checkAppReady() {
+            if (isAdminLoaded && isGroupsLoaded && !isAppReady) {
+                isAppReady = true;
+                // 初始路由解析
+                if (window.location.hash) {
+                    handleHashChange();
+                } else if (state.groups.length > 0) {
+                    switchTab(state.groups[0].id);
+                } else {
+                    switchTab('admin');
+                }
+                
+                // 初始套用側邊欄 CSS 狀態
+                if (!state.isSidebarOpen) {
+                    document.getElementById('sidebar').classList.add('sidebar-collapsed');
+                }
+            }
+        }
+
+        // Firebase 資料寫入輔助函式
+        function saveAdminSettings() {
+            if (!auth.currentUser) return;
+            setDoc(doc(db, 'artifacts', sysAppId, 'public', 'data', 'settings', 'admin'), {
+                menuData: menuData,
+                stores: state.stores
+            }).catch(e => console.error(e));
+        }
+
+        function saveGroup(group) {
+            if (!auth.currentUser) return;
+            setDoc(doc(db, 'artifacts', sysAppId, 'public', 'data', 'groups', group.id), group)
+                .catch(e => console.error(e));
+        }
+
+        function deleteGroupFromDB(groupId) {
+            if (!auth.currentUser) return;
+            deleteDoc(doc(db, 'artifacts', sysAppId, 'public', 'data', 'groups', groupId))
+                .catch(e => console.error(e));
+        }
 
         function render() {
             renderSidebar();
+            updateTopBar();
             renderMainContent();
+            
+            // 行動裝置優化：點擊並渲染後自動收起側邊欄
+            if (window.innerWidth <= 768 && state.isSidebarOpen) {
+                toggleSidebar(false);
+            }
         }
 
-        // 渲染左側 Tabs
+        function updateTopBar() {
+            const titleEl = document.getElementById('top-title');
+            const shareBtn = document.getElementById('share-container');
+            
+            if (!isAppReady) {
+                titleEl.textContent = '系統載入中...';
+                shareBtn.classList.add('hidden');
+                return;
+            }
+
+            if (state.currentTab === 'admin') {
+                titleEl.textContent = '管理員控制台';
+                shareBtn.classList.add('hidden');
+            } else {
+                const group = state.groups.find(g => g.id === state.currentTab);
+                titleEl.textContent = group ? group.name : '團客需求管理';
+                if (group) {
+                    shareBtn.classList.remove('hidden');
+                    shareBtn.classList.add('flex');
+                } else {
+                    shareBtn.classList.add('hidden');
+                    shareBtn.classList.remove('flex');
+                }
+            }
+        }
+
+        function toggleSidebar(forceState) {
+            const sidebar = document.getElementById('sidebar');
+            if (typeof forceState === 'boolean') {
+                state.isSidebarOpen = forceState;
+            } else {
+                state.isSidebarOpen = !state.isSidebarOpen;
+            }
+            if (state.isSidebarOpen) {
+                sidebar.classList.remove('sidebar-collapsed');
+            } else {
+                sidebar.classList.add('sidebar-collapsed');
+            }
+        }
+
         function renderSidebar() {
             const tabList = document.getElementById('tab-list');
             let html = '';
-
-            // 管理員 Tab
             const adminActive = state.currentTab === 'admin' ? 'bg-pine-light border-gold border-l-4' : 'hover:bg-pine-green border-transparent border-l-4';
             html += `
                 <button onclick="switchTab('admin')" class="w-full text-left px-4 py-3 rounded-r flex items-center gap-3 transition-colors ${adminActive}">
                     <i class="fas fa-cog text-gold"></i>
-                    <span class="${state.currentTab === 'admin' ? 'text-white font-bold' : 'text-gray-400'}">菜單與項目管理</span>
+                    <span class="${state.currentTab === 'admin' ? 'text-white font-bold' : 'text-gray-400'}">菜單與分店管理</span>
                 </button>
             `;
 
-            // 團客 Tabs
             state.groups.forEach(group => {
                 const isActive = state.currentTab === group.id ? 'bg-pine-light border-gold border-l-4' : 'hover:bg-pine-green border-transparent border-l-4';
                 html += `
                     <div class="group relative flex items-center ${isActive} rounded-r transition-colors">
                         <button onclick="switchTab('${group.id}')" class="flex-1 text-left px-4 py-3 flex flex-col overflow-hidden">
                             <span class="truncate ${state.currentTab === group.id ? 'text-white font-bold' : 'text-gray-400'}">${group.name}</span>
-                            ${group.date ? `<span class="text-xs text-gold-light opacity-70">${group.date} ${group.time}</span>` : '<span class="text-xs text-gray-500 opacity-70">尚未設定時間</span>'}
+                            ${group.date ? `<span class="text-xs text-gold-light opacity-70">${group.date} ${group.timeStart || group.time || ''}${group.timeEnd ? ' ~ ' + group.timeEnd : ''}</span>` : '<span class="text-xs text-gray-500 opacity-70">尚未設定時間</span>'}
                         </button>
                         <button onclick="deleteGroup('${group.id}')" class="absolute right-2 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 p-2">
                             <i class="fas fa-trash-alt text-sm"></i>
@@ -173,13 +372,11 @@
                     </div>
                 `;
             });
-
             tabList.innerHTML = html;
         }
 
         function renderMainContent() {
             const content = document.getElementById('main-content');
-            
             if (state.currentTab === 'admin') {
                 content.innerHTML = getAdminHTML();
             } else {
@@ -187,7 +384,7 @@
                 if (group) {
                     content.innerHTML = getGroupHTML(group);
                 } else {
-                    switchTab('admin'); // Fallback
+                    content.innerHTML = `<div class="text-center text-gray-400 mt-20">資料同步中或找不到該團客資料...</div>`;
                 }
             }
         }
@@ -195,7 +392,7 @@
         function getAdminHTML() {
             let html = `
                 <div class="max-w-4xl mx-auto">
-                    <!-- 新增：分店開放設定 -->
+                    <!-- 分店開放設定 -->
                     <div class="mb-8 bg-[#0a150f] p-6 rounded-lg border border-pine-green shadow-lg">
                         <h2 class="text-2xl font-bold text-gold tracking-wider flex items-center gap-3 border-b border-pine-green pb-3 mb-4">
                             <i class="fas fa-store"></i> 分店開放設定
@@ -235,38 +432,40 @@
                     const badgeText = item.type === 'body' ? '身體 (可選女師)' : '腳底/局部';
                     
                     html += `
-                        <label class="service-item flex items-start gap-3 p-4 bg-pine-dark rounded border border-pine-green cursor-pointer">
-                            <div class="mt-1">
+                        <div class="service-item flex items-start gap-3 p-4 bg-pine-dark rounded border border-pine-green hover:border-gold transition-colors">
+                            <div class="mt-2 flex items-center">
                                 <input type="checkbox" class="w-5 h-5 cursor-pointer rounded" 
                                     ${item.active ? 'checked' : ''} 
+                                    title="勾選以開放給客端選擇"
                                     onchange="toggleMenuItem(${catIndex}, ${itemIndex}, this.checked)">
                             </div>
                             <div class="flex-1">
-                                <div class="font-bold text-gray-200">${item.name}</div>
-                                <div class="flex justify-between items-center mt-2">
-                                    <span class="text-gold text-sm">$${item.price}</span>
+                                <input type="text" value="${item.name}" 
+                                    onchange="updateItemName(${catIndex}, ${itemIndex}, this.value)"
+                                    class="w-full bg-black/40 border border-pine-green/50 rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-gold font-bold text-sm mb-2" placeholder="項目名稱">
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-gold text-sm">$</span>
+                                        <input type="number" value="${item.price}" 
+                                            onchange="updateItemPrice(${catIndex}, ${itemIndex}, this.value)"
+                                            class="w-20 bg-black/40 border border-pine-green/50 rounded px-2 py-1 text-gold focus:outline-none focus:border-gold text-sm" placeholder="價格">
+                                    </div>
                                     <span class="text-xs px-2 py-1 rounded ${badgeClass}">${badgeText}</span>
                                 </div>
                             </div>
-                        </label>
+                        </div>
                     `;
                 });
-
                 html += `</div></div>`;
             });
-
             html += `</div>`;
             return html;
         }
 
         function getGroupHTML(group) {
-            // 取得所有啟用中的菜單項目 (平坦化陣列方便下拉選單使用)
             const activeItems = menuData.flatMap(cat => cat.items).filter(item => item.active);
-            
-            // 取得啟用中的分店
             const activeStores = state.stores.filter(store => store.active);
 
-            // 計算統計資料
             let totalGuests = group.guests.length;
             let femaleTherapistCount = 0;
             let bodyCount = 0;
@@ -286,7 +485,6 @@
             let html = `
                 <div class="max-w-5xl mx-auto flex flex-col h-full">
                     
-                    <!-- 標頭與時間/分店設定 -->
                     <div class="bg-pine-dark p-6 rounded-t-lg border-b-2 border-gold flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 shrink-0">
                         <div class="flex-1 w-full xl:w-auto">
                             <input type="text" value="${group.name}" 
@@ -308,8 +506,12 @@
                                 <input type="date" value="${group.date}" onchange="updateGroupDate('${group.id}', this.value)" class="bg-pine-dark text-white border border-pine-light rounded px-2 py-1 text-sm focus:outline-none focus:border-gold">
                             </div>
                             <div class="flex flex-col w-full md:w-auto">
-                                <label class="text-xs text-gray-400 mb-1">預約時間</label>
-                                <input type="time" value="${group.time}" onchange="updateGroupTime('${group.id}', this.value)" class="bg-pine-dark text-white border border-pine-light rounded px-2 py-1 text-sm focus:outline-none focus:border-gold">
+                                <label class="text-xs text-gray-400 mb-1">預約時間區段</label>
+                                <div class="flex items-center gap-1">
+                                    <input type="time" value="${group.timeStart || group.time || ''}" onchange="updateGroupTimeStart('${group.id}', this.value)" class="bg-pine-dark text-white border border-pine-light rounded px-2 py-1 text-sm focus:outline-none focus:border-gold w-full md:w-auto">
+                                    <span class="text-gray-400">~</span>
+                                    <input type="time" value="${group.timeEnd || ''}" onchange="updateGroupTimeEnd('${group.id}', this.value)" class="bg-pine-dark text-white border border-pine-light rounded px-2 py-1 text-sm focus:outline-none focus:border-gold w-full md:w-auto">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -325,7 +527,6 @@
                         </div>
                     </div>
 
-                    <!-- 客人列表區 -->
                     <div class="bg-[#0a150f] p-6 border-x border-pine-green flex-1 overflow-y-auto">
                         <div class="flex justify-between items-end mb-4">
                             <h3 class="text-lg text-gray-200 font-bold border-l-4 border-gold pl-2">需求明細</h3>
@@ -340,7 +541,6 @@
                             </div>
                         ` : `
                             <div class="space-y-3">
-                                <!-- 表頭 -->
                                 <div class="grid grid-cols-12 gap-2 text-sm text-gray-400 px-4 pb-2 border-b border-pine-green hidden md:grid">
                                     <div class="col-span-1">編號</div>
                                     <div class="col-span-3">客人稱呼</div>
@@ -351,29 +551,23 @@
                         `}
 
                         ${group.guests.map((guest, index) => {
-                            // 生成該客人的下拉選單 HTML
                             let optionsHTML = `<option value="">-- 請選擇服務項目 --</option>`;
-                            
-                            // 將 activeItems 照分類分組顯示在下拉選單
                             menuData.forEach(cat => {
                                 const availableItems = cat.items.filter(item => item.active);
                                 if(availableItems.length > 0) {
                                     optionsHTML += `<optgroup label="【${cat.category}】">`;
                                     availableItems.forEach(item => {
                                         const selected = guest.serviceId === item.id ? 'selected' : '';
-                                        optionsHTML += `<option value="${item.id}" data-type="${item.type}" ${selected}>${item.name} ($${item.price})</option>`;
+                                        optionsHTML += `<option value="${item.id}" ${selected}>${item.name} ($${item.price})</option>`;
                                     });
                                     optionsHTML += `</optgroup>`;
                                 }
                             });
 
-                            // 判斷目前選擇的項目是否為身體 (決定是否開放女師 Checkbox)
                             let isBodyService = false;
                             if (guest.serviceId) {
                                 const selectedService = activeItems.find(i => i.id === guest.serviceId);
-                                if (selectedService && selectedService.type === 'body') {
-                                    isBodyService = true;
-                                }
+                                if (selectedService && selectedService.type === 'body') isBodyService = true;
                             }
 
                             return `
@@ -421,7 +615,6 @@
                         ${group.guests.length > 0 ? '</div>' : ''}
                     </div>
 
-                    <!-- 統計資訊區 (固定在底部) -->
                     <div class="bg-pine-dark p-4 rounded-b-lg border-t-2 border-gold shrink-0 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                         <div class="bg-black/30 rounded p-2 border border-pine-green">
                             <div class="text-xs text-gray-400">總人數</div>
@@ -446,57 +639,163 @@
         }
 
         function switchTab(tabId) {
+            if (tabId === 'admin' && !state.isAdminAuth) {
+                showPasswordModal();
+                return;
+            }
             state.currentTab = tabId;
-            render();
+            window.location.hash = tabId; 
+            if(window.location.hash.replace('#', '') === tabId) {
+                render();
+            }
         }
 
-        // --- 管理員功能 ---
+        window.addEventListener('hashchange', () => {
+            if(isAppReady) handleHashChange();
+        });
+        
+        function handleHashChange() {
+            const hash = window.location.hash.replace('#', '');
+            if (hash) {
+                if (hash === 'admin') {
+                    if (!state.isAdminAuth) {
+                        showPasswordModal();
+                    } else if (state.currentTab !== 'admin') {
+                        state.currentTab = 'admin';
+                        render();
+                    }
+                } else {
+                    let group = state.groups.find(g => g.id === hash);
+                    if (!group) {
+                        // 新分享連結自動建立群組寫入 Firebase
+                        group = {
+                            id: hash,
+                            name: '新旅行團 (' + hash.substring(0,6) + ')',
+                            date: '',
+                            timeStart: '',
+                            timeEnd: '',
+                            storeId: 'store_qc',
+                            guests: []
+                        };
+                        state.groups.push(group);
+                        saveGroup(group);
+                    }
+                    if (state.currentTab !== hash) {
+                        state.currentTab = hash;
+                        render();
+                    }
+                }
+            } else {
+                if (state.groups.length > 0) switchTab(state.groups[0].id);
+                else switchTab('admin');
+            }
+        }
+
+        function showPasswordModal() {
+            if (document.getElementById('pwd-modal')) return;
+            const modalHtml = `
+                <div id="pwd-modal" class="fixed inset-0 bg-black/80 flex justify-center items-center z-[100] backdrop-blur-sm">
+                    <div class="bg-pine-dark border border-gold p-6 rounded-lg max-w-sm w-full shadow-2xl">
+                        <h3 class="text-xl text-gold font-bold mb-4"><i class="fas fa-lock mr-2"></i>管理員驗證</h3>
+                        <p class="text-sm text-gray-400 mb-4">請輸入密碼以進入後台 (預設: 8888)</p>
+                        <input type="password" id="admin-pwd" class="w-full bg-black/40 border border-pine-green rounded px-3 py-2 text-gray-200 focus:outline-none focus:border-gold mb-2" placeholder="請輸入密碼">
+                        <p id="pwd-error" class="text-red-400 text-sm mb-4 hidden">密碼錯誤，請重試！</p>
+                        <div class="flex justify-end gap-3 mt-4">
+                            <button onclick="closePasswordModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition">取消</button>
+                            <button onclick="verifyPassword()" class="px-4 py-2 bg-gold text-pine-dark font-bold rounded hover:bg-gold-light transition">確認</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.getElementById('admin-pwd').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') verifyPassword();
+            });
+            document.getElementById('admin-pwd').focus();
+        }
+
+        function closePasswordModal() {
+            document.getElementById('pwd-modal')?.remove();
+            if (window.location.hash === '#admin') {
+                window.location.hash = state.currentTab || (state.groups.length > 0 ? state.groups[0].id : '');
+            }
+        }
+
+        function verifyPassword() {
+            const pwd = document.getElementById('admin-pwd').value;
+            if (pwd === '8888') {
+                state.isAdminAuth = true;
+                document.getElementById('pwd-modal')?.remove();
+                switchTab('admin');
+            } else {
+                document.getElementById('pwd-error').classList.remove('hidden');
+                document.getElementById('admin-pwd').value = '';
+                document.getElementById('admin-pwd').focus();
+            }
+        }
+        
+        function copyShareLink() {
+            const url = window.location.href;
+            const textArea = document.createElement("textarea");
+            textArea.value = url;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-5 right-5 bg-pine-light border border-pine-green text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-10 opacity-0 z-50 flex items-center gap-2';
+                toast.innerHTML = `<i class="fas fa-check-circle text-gold-light"></i> 已複製此團專屬連結！`;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
+                setTimeout(() => {
+                    toast.classList.add('translate-y-10', 'opacity-0');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            } catch (err) {}
+            document.body.removeChild(textArea);
+        }
+
         function toggleMenuItem(catIndex, itemIndex, isChecked) {
             menuData[catIndex].items[itemIndex].active = isChecked;
+            saveAdminSettings();
         }
 
-        // 新增：切換分店開放狀態
         function toggleStoreItem(storeIndex, isChecked) {
-            // 預設分店不允許更改狀態 (雖然 HTML 已 disable，但這裡做雙重防護)
             if (!state.stores[storeIndex].isDefault) {
                 state.stores[storeIndex].active = isChecked;
-                
-                // 如果有團客目前選了被關閉的分店，自動幫他切換回預設分店(中清店)
                 if (!isChecked) {
                     const closedStoreId = state.stores[storeIndex].id;
                     const defaultStoreId = state.stores.find(s => s.isDefault).id;
                     state.groups.forEach(group => {
                         if (group.storeId === closedStoreId) {
                             group.storeId = defaultStoreId;
+                            saveGroup(group);
                         }
                     });
                 }
+                saveAdminSettings();
             }
         }
 
-        // --- 團客功能 ---
         function addGroup() {
+            const newId = 'group_' + Date.now();
             const newGroup = {
-                id: 'group_' + Date.now(),
-                name: '新旅行團',
+                id: newId,
+                name: '新旅行團 (' + newId.substring(newId.length-4) + ')',
                 date: '',
-                time: '',
-                storeId: 'store_qc', // 預設帶入中清店
+                timeStart: '',
+                timeEnd: '',
+                storeId: 'store_qc',
                 guests: []
             };
-            state.groups.push(newGroup);
-            state.currentTab = newGroup.id;
-            render();
+            saveGroup(newGroup); // 寫入 Firebase
+            switchTab(newId);
         }
 
         function deleteGroup(groupId) {
-            // 使用自訂的 Modal 替代原生的 confirm，但為了單檔簡潔，這裡實作一個簡易的自訂確認視窗邏輯
-            // 不使用 window.confirm
             const group = state.groups.find(g => g.id === groupId);
-            
-            // 建立 Modal UI
             const modalHtml = `
-                <div id="custom-modal" class="fixed inset-0 bg-black/80 flex justify-center items-center z-50 backdrop-blur-sm">
+                <div id="custom-modal" class="fixed inset-0 bg-black/80 flex justify-center items-center z-[200] backdrop-blur-sm">
                     <div class="bg-pine-dark border border-gold p-6 rounded-lg max-w-sm w-full shadow-2xl">
                         <h3 class="text-xl text-white font-bold mb-4">確認刪除</h3>
                         <p class="text-gray-300 mb-6">確定要刪除「${group.name}」嗎？此操作無法還原。</p>
@@ -508,49 +807,43 @@
                 </div>
             `;
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-            document.getElementById('modal-cancel').onclick = () => {
-                document.getElementById('custom-modal').remove();
-            };
-
+            document.getElementById('modal-cancel').onclick = () => document.getElementById('custom-modal').remove();
             document.getElementById('modal-confirm').onclick = () => {
-                state.groups = state.groups.filter(g => g.id !== groupId);
-                if (state.currentTab === groupId) {
-                    state.currentTab = state.groups.length > 0 ? state.groups[0].id : 'admin';
-                }
+                deleteGroupFromDB(groupId); // 從 Firebase 刪除
                 document.getElementById('custom-modal').remove();
-                render();
+                if (state.currentTab === groupId) {
+                    const remainingGroups = state.groups.filter(g => g.id !== groupId);
+                    const nextTab = remainingGroups.length > 0 ? remainingGroups[0].id : 'admin';
+                    switchTab(nextTab);
+                }
             };
         }
 
         function updateGroupName(groupId, newName) {
             const group = state.groups.find(g => g.id === groupId);
-            if (group) group.name = newName;
-            renderSidebar(); // 只更新側邊欄即可，輸入框本身已經有值
+            if (group) { group.name = newName; saveGroup(group); }
         }
 
         function updateGroupDate(groupId, val) {
             const group = state.groups.find(g => g.id === groupId);
-            if (group) group.date = val;
-            renderSidebar();
+            if (group) { group.date = val; saveGroup(group); }
         }
 
-        function updateGroupTime(groupId, val) {
+        function updateGroupTimeStart(groupId, val) {
             const group = state.groups.find(g => g.id === groupId);
-            if (group) group.time = val;
-            renderSidebar();
+            if (group) { group.timeStart = val; saveGroup(group); }
         }
 
-        // 新增：更新團客分店
+        function updateGroupTimeEnd(groupId, val) {
+            const group = state.groups.find(g => g.id === groupId);
+            if (group) { group.timeEnd = val; saveGroup(group); }
+        }
+
         function updateGroupStore(groupId, val) {
             const group = state.groups.find(g => g.id === groupId);
-            if (group) {
-                group.storeId = val;
-                // 這裡可以選擇重新渲染以確保資料同步，但在這裡切換下拉選單本身不需要重繪整個畫面
-            }
+            if (group) { group.storeId = val; saveGroup(group); }
         }
 
-        // --- 客人功能 ---
         function addGuest(groupId) {
             const group = state.groups.find(g => g.id === groupId);
             if (group) {
@@ -560,7 +853,7 @@
                     serviceId: '',
                     reqFemale: false
                 });
-                renderMainContent(); // 重新渲染右側內容
+                saveGroup(group);
             }
         }
 
@@ -568,15 +861,25 @@
             const group = state.groups.find(g => g.id === groupId);
             if (group) {
                 group.guests = group.guests.filter(g => g.id !== guestId);
-                renderMainContent();
+                saveGroup(group);
             }
+        }
+
+        function updateItemName(catIndex, itemIndex, val) {
+            menuData[catIndex].items[itemIndex].name = val;
+            saveAdminSettings();
+        }
+
+        function updateItemPrice(catIndex, itemIndex, val) {
+            menuData[catIndex].items[itemIndex].price = Number(val);
+            saveAdminSettings();
         }
 
         function updateGuestName(groupId, guestId, name) {
             const group = state.groups.find(g => g.id === groupId);
             if (group) {
                 const guest = group.guests.find(g => g.id === guestId);
-                if (guest) guest.name = name;
+                if (guest) { guest.name = name; saveGroup(group); }
             }
         }
 
@@ -586,8 +889,6 @@
                 const guest = group.guests.find(g => g.id === guestId);
                 if (guest) {
                     guest.serviceId = serviceId;
-                    
-                    // 尋找服務類型，若非身體則強制取消指定女師
                     let isBody = false;
                     for (let cat of menuData) {
                         const item = cat.items.find(i => i.id === serviceId);
@@ -596,12 +897,8 @@
                             break;
                         }
                     }
-
-                    if (!isBody) {
-                        guest.reqFemale = false;
-                    }
-                    
-                    renderMainContent(); // 重新渲染以更新核取方塊的狀態與統計
+                    if (!isBody) guest.reqFemale = false;
+                    saveGroup(group);
                 }
             }
         }
@@ -610,16 +907,12 @@
             const group = state.groups.find(g => g.id === groupId);
             if (group) {
                 const guest = group.guests.find(g => g.id === guestId);
-                if (guest) {
-                    guest.reqFemale = isChecked;
-                    renderMainContent(); // 重新渲染以更新底部統計數字
-                }
+                if (guest) { guest.reqFemale = isChecked; saveGroup(group); }
             }
         }
 
-        window.onload = () => {
-            render();
-        };
+        // 啟動應用程式，連接資料庫
+        initApp();
 
     </script>
 </body>
