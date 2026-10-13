@@ -341,7 +341,7 @@
                 </div>
             </div>
 
-            <!-- 截圖專用標頭區塊：上下兩行排版 -->
+            <!-- 截圖專用標頭區塊 -->
             <div id="screenshot-header" style="background: linear-gradient(135deg, #1b5e20, #0a380e); border: 1px solid var(--accent-gold); padding: 18px 25px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                 <div style="text-align: left;">
                     <span style="font-size: 12px; color: #a5d6a7; display: block; letter-spacing: 1px;">團客專案名稱</span>
@@ -356,8 +356,8 @@
 
             <div class="card">
                 <h3>
-                    <span id="current-store-title">[載入中]</span> 顧客服務需求填寫 
-                    <span style="font-size: 13px; color: var(--text-gray); font-weight: normal; margin-left:10px;">(於對應項目輸入人數即可)</span>
+                    <span id="current-store-title">[中清店]</span> 顧客服務需求填寫 
+                    <span style="font-size: 13px; color: var(--text-gray); font-weight: normal; margin-left:10px;">(於對應項目輸入總共人數即可)</span>
                 </h3>
                 <div id="guest-container">
                     <!-- Item Selection Rows -->
@@ -375,11 +375,11 @@
 
             <div class="summary-box">
                 <div class="summary-item">
-                    <h4>總人數 (全店加總)</h4>
+                    <h4>總共人數 (全店加總)</h4>
                     <span id="sum-people">0</span>
                 </div>
                 <div class="summary-item">
-                    <h4>指定女師需求</h4>
+                    <h4>需求女師</h4>
                     <span id="sum-female">0</span>
                 </div>
                 <div class="summary-item">
@@ -626,7 +626,7 @@
             
             if (diffDays === 7 || diffDays === 3 || diffDays === 1) {
                 alertShown = true;
-                await window.customAlert(`【貼心提醒】<br>距離您的預約日期只剩 <span style="color:var(--accent-gold); font-size:20px;">${diffDays}</span> 天。<br>請再次確認人數與服務需求是否需要調整！`);
+                await window.customAlert(`【貼心提醒】<br>距離您的預約日期只剩 <span style="color:var(--accent-gold); font-size:20px;">${diffDays}</span> 天。<br>請再次確認總共人數與服務需求是否需要調整！`);
             }
         }
 
@@ -756,8 +756,8 @@
             });
 
             let summaryHtml = totalPeople > 0
-                ? `<div style="font-size: 13px; color: var(--accent-gold); margin-top: 6px; line-height: 1.4;">👥 共 ${totalPeople} 人<br><span style="color: #999; font-size: 12px;">${summaryText.join('、')}</span></div>`
-                : `<div style="font-size: 13px; color: #666; margin-top: 6px;">👥 尚未填寫人數</div>`;
+                ? `<div style="font-size: 13px; color: var(--accent-gold); margin-top: 6px; line-height: 1.4;">👥 總共 ${totalPeople} 人<br><span style="color: #999; font-size: 12px;">${summaryText.join('、')}</span></div>`
+                : `<div style="font-size: 13px; color: #666; margin-top: 6px;">👥 尚未填寫</div>`;
 
             const formattedDate = formatDateWithDay(g.date);
             
@@ -965,7 +965,6 @@
                 <div id="toggles-foot" style="display:flex; flex-wrap:wrap; gap:10px; width:100%;"></div>
             `;
 
-            // 分店 Toggle
             const hiddenStores = group.hiddenStores || [];
             Object.keys(globalSettings.stores || {}).forEach(store => {
                 if (globalSettings.stores[store]) {
@@ -981,7 +980,6 @@
                 }
             });
 
-            // 項目 Toggle
             const hiddenItems = group.hiddenItems || [];
             (globalSettings.menuItems || []).forEach(item => {
                 const itemIdStr = String(item.id);
@@ -1054,7 +1052,6 @@
                 if (!hiddenItems.includes(itemIdStr)) visibleItemsCount++;
             });
 
-            // 計算各分店明細與總和 (排除被隱藏或停用的店)
             Object.keys(multiStoreCounts).forEach(sName => {
                 if (hiddenStores.includes(sName) || !globalSettings.stores[sName]) return;
                 
@@ -1073,7 +1070,7 @@
                             storePeople += counts.count;
                             const itemName = itemDef.name.split(' ')[0];
                             let txt = `${itemName} x${counts.count}`;
-                            if (counts.femaleCount > 0) txt += `(女師x${counts.femaleCount})`;
+                            if (counts.femaleCount > 0) txt += `(需求女師x${counts.femaleCount})`;
                             storeSummaryText.push(txt);
                         }
                     }
@@ -1146,17 +1143,17 @@
                         <div class="item-name">${item.name} <span style="color:var(--accent-gold); font-size:14px; margin-left:10px;">$${item.price}</span></div>
                         <div class="item-inputs">
                             <div class="input-group">
-                                <label>人數</label>
+                                <label>總共人數</label>
                                 <input type="number" id="count-${itemIdStr}" min="0" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'count', parseInt(this.value)||0)">
                             </div>
                             ${isBody ? `
                             <div class="input-group">
-                                <label style="color:var(--text-light);">女師</label>
+                                <label style="color:var(--text-light);">需求女師</label>
                                 <input type="number" id="female-${itemIdStr}" min="0" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'femaleCount', parseInt(this.value)||0)">
                             </div>
                             ` : `
                             <div class="input-group" style="opacity: 0.3;">
-                                <label>女師</label>
+                                <label>需求女師</label>
                                 <input type="number" disabled value="0" style="cursor:not-allowed;" title="此項目無法指定女師">
                             </div>
                             `}
@@ -1215,7 +1212,7 @@
             if (value < 0) value = 0;
             if (field === 'femaleCount' && value > storeCounts[itemIdStr].count) {
                 value = storeCounts[itemIdStr].count;
-                window.customAlert("指定女師人數不能超過該項目的總人數喔！");
+                window.customAlert("需求女師人數不能超過該項目的總共人數喔！");
             }
 
             storeCounts[itemIdStr][field] = value;
