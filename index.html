@@ -7,7 +7,7 @@
     <style>
         /* 深色高質感主題 (Dark Zen Theme) */
         :root {
-            color-scheme: dark; /* 讓原生選擇器支援深色模式 */
+            color-scheme: dark;
             --primary-dark: #121212;
             --secondary-dark: #1e1e1e;
             --primary-green: #1b5e20;
@@ -143,36 +143,33 @@
         input:focus, select:focus, textarea:focus { border-color: var(--accent-gold); outline: none; }
         input[readonly], select:disabled { background-color: rgba(255,255,255,0.05); color: #888; cursor: not-allowed; border-color: transparent;}
         
-        /* 讓日期與時間的選擇圖示反轉為白色，並確保滑鼠游標為點擊狀態 */
         input[type="date"]::-webkit-calendar-picker-indicator,
         input[type="time"]::-webkit-calendar-picker-indicator {
-            filter: invert(1);
-            cursor: pointer;
-            opacity: 0.8;
+            filter: invert(1); cursor: pointer; opacity: 0.8;
         }
         input[type="date"]::-webkit-calendar-picker-indicator:hover,
-        input[type="time"]::-webkit-calendar-picker-indicator:hover {
-            opacity: 1;
-        }
+        input[type="time"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 
         .notice-box { background: rgba(212, 175, 55, 0.1); border-left: 4px solid var(--accent-gold); padding: 20px; margin-bottom: 25px; border-radius: 0 4px 4px 0; font-size: 14px; line-height: 1.8; color: #ddd; }
         
-        /* Guest List */
-        .guest-row {
-            display: flex; gap: 15px; align-items: center; padding: 15px; margin-bottom: 12px;
-            background: var(--primary-dark); border: 1px solid var(--border-color); border-radius: 6px; flex-wrap: wrap;
+        /* Item Selection (New Structure) */
+        .item-selection-row {
+            background: var(--primary-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
         }
-        .guest-row select { flex: 2; min-width: 180px; }
-        .guest-row .gender-pref { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 120px; color: var(--text-light); }
-        .btn-remove { background: rgba(244, 67, 54, 0.1); color: #ef5350; border: 1px solid rgba(244, 67, 54, 0.3); padding: 10px 15px; border-radius: 4px; cursor: pointer; transition: 0.2s; }
-        .btn-remove:hover { background: rgba(244, 67, 54, 0.2); }
-        
-        .btn-add { background: var(--primary-green); color: white; border: none; padding: 12px 20px; border-radius: 4px; cursor: pointer; font-size: 15px; display: block; width: 100%; margin-top: 15px; transition: 0.2s; letter-spacing: 1px;}
-        .btn-add:hover { background: #2e7d32; }
-        
-        .quick-add-box { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; background: var(--primary-dark); padding: 10px 15px; border-radius: 6px; border: 1px solid var(--border-color); }
-        .quick-add-box input { width: 80px; margin: 0; padding: 8px; text-align: center; }
-        .btn-quick-add { background: var(--accent-gold); color: var(--bg-dark); border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .item-selection-row .item-name { font-weight: bold; color: var(--text-light); flex: 2; min-width: 200px; }
+        .item-selection-row .item-inputs { display: flex; gap: 15px; flex: 1; justify-content: flex-end; }
+        .item-selection-row .input-group { display: flex; align-items: center; gap: 8px; }
+        .item-selection-row .input-group label { margin: 0; color: var(--text-gray); font-size: 14px; white-space: nowrap; }
+        .item-selection-row .input-group input { width: 70px; text-align: center; padding: 8px; margin: 0; background: var(--secondary-dark);}
         
         .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid var(--border-color); }
         .menu-edit-row { display: flex; gap: 15px; margin-bottom: 15px; align-items: center; background: var(--primary-dark); padding: 15px; border: 1px solid var(--border-color); border-radius: 6px; flex-wrap: wrap;}
@@ -199,9 +196,9 @@
             #sidebar { position: absolute; height: 100%; box-shadow: 5px 0 20px rgba(0,0,0,0.5); }
             .top-bar { padding: 15px; }
             .view-section { padding: 15px; }
-            .guest-row { flex-direction: column; align-items: stretch; }
-            .guest-row select, .guest-row .gender-pref, .btn-remove { width: 100%; }
-            .quick-add-box { flex-wrap: wrap; }
+            .item-selection-row { flex-direction: column; align-items: stretch; }
+            .item-selection-row .item-inputs { justify-content: space-between; }
+            .item-selection-row .input-group { flex: 1; justify-content: space-between; background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px;}
         }
     </style>
 </head>
@@ -237,9 +234,7 @@
         
         <div id="sidebar-groups" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
             <div class="new-group-btn" onclick="createNewGroup()">+ 新增團客需求單</div>
-            <div id="group-list">
-                <!-- 群組列表 -->
-            </div>
+            <div id="group-list"></div>
         </div>
     </div>
 
@@ -262,7 +257,7 @@
                 <div class="form-row">
                     <div class="form-group admin-only">
                         <label>專案狀態</label>
-                        <select id="db-status" class="auto-save status-select" onchange="updateStatusColor(this)">
+                        <select id="db-status" class="auto-save status-select" onchange="window.updateStatusColor(this)">
                             <option value="確認中">確認中</option>
                             <option value="已確認">已確認</option>
                             <option value="已完成">已完成</option>
@@ -296,21 +291,23 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- 客端可選項目設定 (僅管理員可見) -->
+            <div class="card admin-only">
+                <h3>
+                    客端開放選擇項目設定
+                    <span style="font-size: 13px; color: var(--text-gray); font-weight: normal;">(取消勾選則該團客無法選擇此項目)</span>
+                </h3>
+                <div id="group-menu-toggles" style="display: flex; flex-wrap: wrap; gap: 10px;">
+                    <!-- Toggles generated by JS -->
+                </div>
+            </div>
 
             <div class="card">
-                <h3>顧客名單與服務需求</h3>
-                
-                <!-- 開放給客端使用的快速新增區塊，移除了 admin-only class -->
-                <div class="quick-add-box">
-                    <span style="font-size: 14px; color: var(--text-gray);">快速新增空位：</span>
-                    <input type="number" id="quick-add-num" min="1" max="50" value="10">
-                    <button class="btn-quick-add" onclick="quickAddGuests()">批次產生欄位</button>
-                </div>
-                
+                <h3>顧客服務需求填寫 <span style="font-size: 13px; color: var(--text-gray); font-weight: normal; margin-left:10px;">(於對應項目輸入人數即可)</span></h3>
                 <div id="guest-container">
-                    <!-- Guest Rows -->
+                    <!-- Item Selection Rows -->
                 </div>
-                <button class="btn-add" onclick="addGuestRow()">+ 新增一位顧客</button>
             </div>
 
             <div class="card">
@@ -341,7 +338,7 @@
                 <h3 style="display: flex; flex-wrap: wrap; gap: 10px;">
                     服務項目與價格設定
                 </h3>
-                <div style="margin-bottom: 20px; color: var(--text-gray); font-size: 14px;">設定後將同步更新至所有客端選單。</div>
+                <div style="margin-bottom: 20px; color: var(--text-gray); font-size: 14px;">設定後將同步更新至全系統菜單資料庫。</div>
                 <div id="menu-settings-container">
                     <!-- Menu items -->
                 </div>
@@ -369,7 +366,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // --- 完整照片菜單資料字典 ---
+        // 完整照片菜單資料字典
         const photoDefaultMenu = [
             { id: 1, name: "運動筋膜刀肩頸按摩 (30分)", price: 800, type: "body" },
             { id: 2, name: "運動筋膜刀腳底按摩 (40分)", price: 1200, type: "foot" },
@@ -410,7 +407,6 @@
         // Global State
         let isClientMode = false;
         let clientGroupId = null; 
-        
         let globalSettings = { stores: {}, menuItems: [] };
         let groupsData = {};
         let currentGroupId = null;
@@ -646,7 +642,9 @@
             const newGroup = {
                 name: "新團客專案", status: "確認中",
                 date: "", timeStart: "", timeEnd: "", store: "中清店",
-                remarks: "", guests: []
+                remarks: "", 
+                hiddenItems: [], // 紀錄被隱藏的項目 ID
+                itemCounts: {}   // 紀錄客人選擇的數量 { "itemId": { count: 0, femaleCount: 0 } }
             };
             await setDoc(doc(db, "groups", newId), newGroup);
             window.loadGroup(newId);
@@ -675,7 +673,7 @@
         window.deleteGroup = async (e, id) => {
             e.stopPropagation();
             const pwd = await window.customPrompt("⚠️ 刪除專案請輸入權限密碼：");
-            if (pwd === "8888") { // 密碼已統一為 8888
+            if (pwd === "8888") { 
                 const confirmDel = await window.customConfirm("確定要永久刪除此專案嗎？");
                 if (confirmDel) {
                     await deleteDoc(doc(db, "groups", id));
@@ -702,7 +700,8 @@
                 }
             });
 
-            renderGuestList(data.guests || []);
+            if (!isClientMode) renderGroupMenuToggles(data);
+            renderItemSelections(data);
         }
 
         window.updateStatusColor = (selectEl) => {
@@ -729,86 +728,117 @@
             });
         };
 
-        function renderGuestList(guests) {
+        // --- 專案專屬選單設定 (Admin) ---
+        function renderGroupMenuToggles(group) {
+            const container = document.getElementById('group-menu-toggles');
+            container.innerHTML = '';
+            const hiddenItems = (group.hiddenItems || []).map(String);
+
+            (globalSettings.menuItems || []).forEach(item => {
+                const itemIdStr = String(item.id);
+                const isHidden = hiddenItems.includes(itemIdStr);
+                container.innerHTML += `
+                    <label style="background:var(--primary-dark); padding:10px 15px; border-radius:4px; border:1px solid var(--border-color); cursor:pointer; display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" onchange="window.toggleGroupMenuItem('${group._id}', '${itemIdStr}', this.checked)" ${!isHidden ? 'checked' : ''}>
+                        ${item.name}
+                    </label>
+                `;
+            });
+        }
+
+        window.toggleGroupMenuItem = async (groupId, itemIdStr, isChecked) => {
+            const group = groupsData[groupId];
+            let hiddenItems = (group.hiddenItems || []).map(String);
+            if (isChecked) {
+                // 打開 (從 hidden 中移除)
+                hiddenItems = hiddenItems.filter(id => id !== itemIdStr);
+            } else {
+                // 隱藏 (加入 hidden)
+                if (!hiddenItems.includes(itemIdStr)) hiddenItems.push(itemIdStr);
+                
+                // 若隱藏該項目，將該項目的計數歸零
+                if (group.itemCounts && group.itemCounts[itemIdStr]) {
+                    group.itemCounts[itemIdStr] = { count: 0, femaleCount: 0 };
+                    await updateDoc(doc(db, "groups", groupId), { itemCounts: group.itemCounts });
+                }
+            }
+            await updateDoc(doc(db, "groups", groupId), { hiddenItems });
+        }
+
+        // --- 客端選擇區塊渲染 (核心變更) ---
+        function renderItemSelections(group) {
             const container = document.getElementById('guest-container');
             container.innerHTML = '';
             
-            let total = 0, femaleCount = 0;
-            const menuOptions = (globalSettings.menuItems || []).map(item => 
-                `<option value="${item.id}" data-type="${item.type}">${item.name} ($${item.price})</option>`
-            ).join('');
+            let totalPeople = 0;
+            let totalFemale = 0;
+            const hiddenItems = (group.hiddenItems || []).map(String);
+            const itemCounts = group.itemCounts || {};
 
-            guests.forEach((g, index) => {
-                total++;
-                const itemDef = globalSettings.menuItems.find(m => m.id == g.itemId);
-                const isBody = itemDef ? (itemDef.type === 'body') : false;
-                if (isBody && g.reqFemale) femaleCount++;
+            let visibleItemsCount = 0;
+
+            (globalSettings.menuItems || []).forEach(item => {
+                const itemIdStr = String(item.id);
+                // 該群組隱藏的項目就不渲染
+                if (hiddenItems.includes(itemIdStr)) return;
+
+                visibleItemsCount++;
+                const counts = itemCounts[itemIdStr] || { count: 0, femaleCount: 0 };
+                totalPeople += counts.count;
+                totalFemale += counts.femaleCount;
+                const isBody = item.type === 'body';
 
                 const row = document.createElement('div');
-                row.className = 'guest-row';
+                row.className = 'item-selection-row';
                 row.innerHTML = `
-                    <span style="font-weight:bold; color:var(--accent-gold); width:30px;">#${index + 1}</span>
-                    <select onchange="window.updateGuest(${index}, 'itemId', this.value)">
-                        <option value="">-- 請選擇服務項目 --</option>
-                        ${menuOptions}
-                    </select>
-                    <div class="gender-pref">
-                        <label style="margin:0; font-weight:normal; cursor:pointer;">
-                            <input type="checkbox" onchange="window.updateGuest(${index}, 'reqFemale', this.checked)" 
-                            ${g.reqFemale ? 'checked' : ''} ${isBody ? '' : 'disabled'}> 指定女師
-                        </label>
+                    <div class="item-name">${item.name} <span style="color:var(--accent-gold); font-size:14px; margin-left:10px;">$${item.price}</span></div>
+                    <div class="item-inputs">
+                        <div class="input-group">
+                            <label>人數</label>
+                            <input type="number" min="0" value="${counts.count}" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'count', parseInt(this.value)||0)">
+                        </div>
+                        ${isBody ? `
+                        <div class="input-group">
+                            <label>女師</label>
+                            <input type="number" min="0" max="${counts.count}" value="${counts.femaleCount}" onchange="window.updateItemCount('${group._id}', '${itemIdStr}', 'femaleCount', parseInt(this.value)||0)">
+                        </div>
+                        ` : ''}
                     </div>
-                    <button class="btn-remove" onclick="window.removeGuest(${index})">✕</button>
                 `;
-                const select = row.querySelector('select');
-                if (g.itemId) select.value = g.itemId;
-                
                 container.appendChild(row);
             });
 
-            document.getElementById('sum-people').innerText = total;
-            document.getElementById('sum-female').innerText = femaleCount;
+            if (visibleItemsCount === 0) {
+                container.innerHTML = `<div style="text-align:center; padding:20px; color:#aaa;">管理員尚未開放任何項目。</div>`;
+            }
+
+            document.getElementById('sum-people').innerText = totalPeople;
+            document.getElementById('sum-female').innerText = totalFemale;
         }
 
-        window.addGuestRow = async () => {
-            if (!currentGroupId) return;
-            const currentGuests = groupsData[currentGroupId].guests || [];
-            currentGuests.push({ itemId: "", reqFemale: false });
-            await updateDoc(doc(db, "groups", currentGroupId), { guests: currentGuests });
-        };
-
-        window.quickAddGuests = async () => {
-            if (!currentGroupId) return;
-            const num = parseInt(document.getElementById('quick-add-num').value);
-            if (num > 0 && num <= 50) {
-                const currentGuests = groupsData[currentGroupId].guests || [];
-                for(let i=0; i<num; i++) {
-                    currentGuests.push({ itemId: "", reqFemale: false });
-                }
-                await updateDoc(doc(db, "groups", currentGroupId), { guests: currentGuests });
-            }
-        };
-
-        window.updateGuest = async (index, field, value) => {
-            if (!currentGroupId) return;
-            const currentGuests = groupsData[currentGroupId].guests || [];
+        // --- 更新選擇數量 ---
+        window.updateItemCount = async (groupId, itemIdStr, field, value) => {
+            const group = groupsData[groupId];
+            const itemCounts = group.itemCounts || {};
+            if (!itemCounts[itemIdStr]) itemCounts[itemIdStr] = { count: 0, femaleCount: 0 };
             
-            if (field === 'itemId') {
-                const itemDef = globalSettings.menuItems.find(m => m.id == value);
-                if (itemDef && itemDef.type !== 'body') {
-                    currentGuests[index].reqFemale = false;
-                }
+            // 防呆處理
+            if (value < 0) value = 0;
+            if (field === 'femaleCount' && value > itemCounts[itemIdStr].count) {
+                value = itemCounts[itemIdStr].count;
+                window.customAlert("指定女師人數不能超過該項目的總人數喔！");
             }
-            currentGuests[index][field] = value;
-            await updateDoc(doc(db, "groups", currentGroupId), { guests: currentGuests });
+
+            itemCounts[itemIdStr][field] = value;
+            
+            // 當總人數減少低於女師數時，連動下修女師數
+            if (field === 'count' && itemCounts[itemIdStr].femaleCount > value) {
+                itemCounts[itemIdStr].femaleCount = value;
+            }
+
+            await updateDoc(doc(db, "groups", groupId), { itemCounts });
         };
 
-        window.removeGuest = async (index) => {
-            if (!currentGroupId) return;
-            const currentGuests = groupsData[currentGroupId].guests || [];
-            currentGuests.splice(index, 1);
-            await updateDoc(doc(db, "groups", currentGroupId), { guests: currentGuests });
-        };
 
         // --- 系統設定更新 ---
         function updateStoreOptions() {
