@@ -281,18 +281,18 @@
                         <input type="date" id="db-date" class="auto-save">
                     </div>
                     <div class="form-group">
+                        <label>服務分店 (切換分店可設定該店時間與需求)</label>
+                        <select id="active-store-selector" onchange="window.switchActiveStore(this.value)">
+                            <!-- Options generated dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label>預約時間 (起)</label>
-                        <input type="time" id="db-timeStart" class="auto-save">
+                        <input type="time" id="store-timeStart" class="store-time-input">
                     </div>
                     <div class="form-group">
                         <label>預約時間 (迄)</label>
-                        <input type="time" id="db-timeEnd" class="auto-save">
-                    </div>
-                    <div class="form-group">
-                        <label>服務分店</label>
-                        <select id="db-store" class="auto-save">
-                            <!-- Options from DB -->
-                        </select>
+                        <input type="time" id="store-timeEnd" class="store-time-input">
                     </div>
                     <div class="form-group">
                         <label>統一編號 (統編)</label>
@@ -354,7 +354,10 @@
             </div>
 
             <div class="card">
-                <h3>顧客服務需求填寫 <span style="font-size: 13px; color: var(--text-gray); font-weight: normal; margin-left:10px;">(於對應項目輸入人數即可)</span></h3>
+                <h3>
+                    <span id="current-store-title">[中清店]</span> 顧客服務需求填寫 
+                    <span style="font-size: 13px; color: var(--text-gray); font-weight: normal; margin-left:10px;">(於對應項目輸入人數即可)</span>
+                </h3>
                 <div id="guest-container">
                     <!-- Item Selection Rows -->
                 </div>
@@ -367,7 +370,7 @@
 
             <div class="summary-box">
                 <div class="summary-item">
-                    <h4>總人數</h4>
+                    <h4>總人數 (全店加總)</h4>
                     <span id="sum-people">0</span>
                 </div>
                 <div class="summary-item">
@@ -471,6 +474,7 @@
         let globalSettings = { stores: {}, menuItems: [] };
         let groupsData = {};
         let currentGroupId = null;
+        let activeStore = "中清店"; // 當前畫面上檢視/填寫的分店
 
         window.customAlert = (msg) => {
             return new Promise((resolve) => {
@@ -623,9 +627,8 @@
 
         function lockClientFields() {
             document.getElementById('db-date').readOnly = true;
-            document.getElementById('db-timeStart').readOnly = true;
-            document.getElementById('db-timeEnd').readOnly = true;
-            document.getElementById('db-store').disabled = true;
+            document.getElementById('store-timeStart').readOnly = true;
+            document.getElementById('store-timeEnd').readOnly = true;
             document.getElementById('db-status').disabled = true;
             document.getElementById('db-taxId').readOnly = true;
             document.getElementById('db-depositAmount').readOnly = true;
@@ -633,7 +636,6 @@
             document.getElementById('db-depositMethod').disabled = true;
         }
 
-        // 輔助函式：取得格式化日期與星期
         function formatDateWithDay(dateStr) {
             if (!dateStr) return '未定日期';
             const days = ['日', '一', '二', '三', '四', '五', '六'];
@@ -652,10 +654,20 @@
             Object.keys(groupsData).forEach(id => {
                 const g = groupsData[id];
                 let isExpired = false;
-                if (g.date && g.timeEnd) {
-                    const endDateTime = new Date(`${g.date}T${g.timeEnd}`);
-                    if (now > endDateTime) isExpired = true;
-                }
+                
+                // 檢查是否跨店過期：取所有分店中最晚的時間
+                let latestEndDateTime = null;
+                const storeTimes = g.storeTimes || {};
+                Object.keys(storeTimes).forEach(sName => {
+                    const st = storeTimes[sName];
+                    if (g.date && st.timeEnd) {
+                        const endDt = new Date(`${g.date}T${st.timeEnd}`);
+                        if (!latestEndDateTime || endDt > latestEndDateTime) latestEndDateTime = endDt;
+                    }
+                });
+
+                if (latestEndDateTime && now > latestEndDateTime) isExpired = true;
+
                 if (g.status === '已完成' || isExpired) {
                     if(isExpired && g.status !== '已完成') {
                         updateDoc(doc(db, "groups", id), { status: '已完成' });
@@ -665,13 +677,20 @@
                 } else { activeGroups.push(g); }
             });
 
-            // 嚴謹的時間先後排序 (日期 + 時間起)
             const timeSortFn = (a, b) => {
                 const dateA = a.date || '9999-99-99';
                 const dateB = b.date || '9999-99-99';
                 if (dateA !== dateB) return dateA.localeCompare(dateB);
-                const timeA = a.timeStart || '00:00';
-                const timeB = b.timeStart || '00:00';
+                
+                // 取第一家店的時間來排序
+                const timesA = a.storeTimes || {};
+                const firstStoreA = Object.keys(timesA)[0] || '';
+                const timeA = (timesA[firstStoreA] && timesA[firstStoreA].timeStart) ? timesA[firstStoreA].timeStart : '00:00';
+
+                const timesB = b.storeTimes || {};
+                const firstStoreB = Object.keys(timesB)[0] || '';
+                const timeB = (timesB[firstStoreB] && timesB[firstStoreB].timeStart) ? timesB[firstStoreB].timeStart : '00:00';
+
                 return timeA.localeCompare(timeB);
             };
 
@@ -705,22 +724,42 @@
 
             let totalPeople = 0;
             let summaryText = [];
-            if (g.itemCounts) {
-                Object.keys(g.itemCounts).forEach(itemId => {
-                    const count = g.itemCounts[itemId].count || 0;
+            const multiStoreCounts = g.multiStoreItemCounts || {};
+            let aggregatedCounts = {};
+
+            Object.keys(multiStoreCounts).forEach(storeName => {
+                const storeItems = multiStoreCounts[storeName];
+                Object.keys(storeItems).forEach(itemId => {
+                    const count = storeItems[itemId].count || 0;
                     if (count > 0) {
                         totalPeople += count;
-                        const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
-                        const itemName = itemDef ? itemDef.name.split(' ')[0] : "未知項目"; 
-                        summaryText.push(`${itemName} x${count}`);
+                        aggregatedCounts[itemId] = (aggregatedCounts[itemId] || 0) + count;
                     }
                 });
-            }
+            });
+
+            Object.keys(aggregatedCounts).forEach(itemId => {
+                const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
+                const itemName = itemDef ? itemDef.name.split(' ')[0] : "未知";
+                summaryText.push(`${itemName} x${aggregatedCounts[itemId]}`);
+            });
+
             let summaryHtml = totalPeople > 0
                 ? `<div style="font-size: 13px; color: var(--accent-gold); margin-top: 6px; line-height: 1.4;">👥 共 ${totalPeople} 人<br><span style="color: #999; font-size: 12px;">${summaryText.join('、')}</span></div>`
                 : `<div style="font-size: 13px; color: #666; margin-top: 6px;">👥 尚未填寫人數</div>`;
 
             const formattedDate = formatDateWithDay(g.date);
+            
+            // 組合顯示各店時間
+            let timeStrSummary = [];
+            const storeTimes = g.storeTimes || {};
+            Object.keys(storeTimes).forEach(sName => {
+                const st = storeTimes[sName];
+                if (st.timeStart || st.timeEnd) {
+                    timeStrSummary.push(`${sName}(${st.timeStart || '--'}~${st.timeEnd || '--'})`);
+                }
+            });
+            const timeDisplay = timeStrSummary.length > 0 ? timeStrSummary.join(' / ') : '時間未定';
 
             div.className = `group-item ${statusClass} ${g._id === currentGroupId ? 'active' : ''}`;
             div.innerHTML = `
@@ -732,7 +771,7 @@
                     </div>
                 </div>
                 <div class="group-item-time" onclick="window.loadGroup('${g._id}')">
-                    ${formattedDate} | ${g.timeStart || '--'}~${g.timeEnd || '--'} | ${g.store || '未定'}
+                    ${formattedDate}<br><span style="color:#d4af37;">${timeDisplay}</span>
                 </div>
                 <div onclick="window.loadGroup('${g._id}')">${summaryHtml}</div>
                 <div onclick="window.loadGroup('${g._id}')" style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 5px;">
@@ -748,11 +787,11 @@
             const allItemIds = globalSettings.menuItems.map(m => String(m.id));
             const newGroup = {
                 name: "新團客專案", status: "確認中",
-                date: "", timeStart: "", timeEnd: "", store: "中清店",
+                date: "", storeTimes: {}, 
                 taxId: "", depositAmount: 0, depositDate: "", depositMethod: "未選擇",
                 remarks: "", 
                 hiddenItems: allItemIds, 
-                itemCounts: {}
+                multiStoreItemCounts: {}
             };
             await setDoc(doc(db, "groups", newId), newGroup);
             window.loadGroup(newId);
@@ -801,11 +840,10 @@
             document.getElementById('top-bar-title').innerText = isClientMode ? `填寫需求單 - ${data.name}` : `編輯專案: ${data.name}`;
             
             document.getElementById('ss-group-name').innerText = data.name || '未命名專案';
-            const dateStr = formatDateWithDay(data.date);
-            const timeStr = (data.timeStart || '--') + ' ~ ' + (data.timeEnd || '--');
-            document.getElementById('ss-group-datetime').innerText = `${dateStr}  ${timeStr}`;
+            
+            updateStoreOptions();
 
-            const fields = ['status', 'date', 'timeStart', 'timeEnd', 'store', 'taxId', 'depositAmount', 'depositDate', 'depositMethod', 'remarks'];
+            const fields = ['status', 'date', 'taxId', 'depositAmount', 'depositDate', 'depositMethod', 'remarks'];
             fields.forEach(f => {
                 const el = document.getElementById(`db-${f}`);
                 if (el && document.activeElement !== el) {
@@ -814,8 +852,37 @@
                 }
             });
 
+            // 載入當前分店的時間
+            loadStoreTime(data, activeStore);
+
+            // 更新截圖標頭的時間顯示
+            updateScreenshotHeaderTime(data);
+
             if (!isClientMode) renderGroupMenuToggles(data);
             renderItemSelections(data);
+        }
+
+        function loadStoreTime(group, storeName) {
+            const storeTimes = group.storeTimes || {};
+            const st = storeTimes[storeName] || { timeStart: '', timeEnd: '' };
+            const tStartEl = document.getElementById('store-timeStart');
+            const tEndEl = document.getElementById('store-timeEnd');
+            if (tStartEl && document.activeElement !== tStartEl) tStartEl.value = st.timeStart || '';
+            if (tEndEl && document.activeElement !== tEndEl) tEndEl.value = st.timeEnd || '';
+        }
+
+        function updateScreenshotHeaderTime(group) {
+            const dateStr = formatDateWithDay(group.date);
+            const storeTimes = group.storeTimes || {};
+            let timeStrs = [];
+            Object.keys(storeTimes).forEach(sName => {
+                const st = storeTimes[sName];
+                if (st.timeStart || st.timeEnd) {
+                    timeStrs.push(`${sName}: ${st.timeStart || '--'}~${st.timeEnd || '--'}`);
+                }
+            });
+            const timeDisplay = timeStrs.length > 0 ? timeStrs.join(' | ') : '時間未定';
+            document.getElementById('ss-group-datetime').innerText = `${dateStr}  |  ${timeDisplay}`;
         }
 
         window.updateStatusColor = (selectEl) => {
@@ -825,6 +892,7 @@
             if(selectEl.value === '已完成') selectEl.classList.add('s-completed');
         };
 
+        // 一般欄位變更監聽
         document.querySelectorAll('.auto-save').forEach(el => {
             el.addEventListener('change', (e) => {
                 if (!currentGroupId) return;
@@ -832,6 +900,23 @@
                 let val = e.target.value;
                 if (fieldName === 'depositAmount') val = parseFloat(val) || 0;
                 updateDoc(doc(db, "groups", currentGroupId), { [fieldName]: val });
+            });
+        });
+
+        // 分店時間變更監聽
+        document.querySelectorAll('.store-time-input').forEach(el => {
+            el.addEventListener('change', async (e) => {
+                if (!currentGroupId) return;
+                const group = groupsData[currentGroupId];
+                if (!group.storeTimes) group.storeTimes = {};
+                if (!group.storeTimes[activeStore]) group.storeTimes[activeStore] = { timeStart: '', timeEnd: '' };
+
+                const field = e.target.id === 'store-timeStart' ? 'timeStart' : 'timeEnd';
+                group.storeTimes[activeStore][field] = e.target.value;
+
+                updateScreenshotHeaderTime(group);
+                renderGroupList();
+                await updateDoc(doc(db, "groups", currentGroupId), { storeTimes: group.storeTimes });
             });
         });
 
@@ -879,10 +964,13 @@
                 hiddenItems = hiddenItems.filter(id => id !== itemIdStr);
             } else {
                 if (!hiddenItems.includes(itemIdStr)) hiddenItems.push(itemIdStr);
-                if (group.itemCounts && group.itemCounts[itemIdStr]) {
-                    group.itemCounts[itemIdStr] = { count: 0, femaleCount: 0 };
-                    await updateDoc(doc(db, "groups", groupId), { itemCounts: group.itemCounts });
-                }
+                const multiStoreCounts = group.multiStoreItemCounts || {};
+                Object.keys(multiStoreCounts).forEach(storeName => {
+                    if (multiStoreCounts[storeName][itemIdStr]) {
+                        multiStoreCounts[storeName][itemIdStr] = { count: 0, femaleCount: 0 };
+                    }
+                });
+                await updateDoc(doc(db, "groups", groupId), { hiddenItems, multiStoreItemCounts: multiStoreCounts });
             }
             await updateDoc(doc(db, "groups", groupId), { hiddenItems });
         }
@@ -890,14 +978,33 @@
         function renderItemSelections(group) {
             const container = document.getElementById('guest-container');
             const hiddenItems = (group.hiddenItems || []).map(String);
-            const itemCounts = group.itemCounts || {};
             
-            let totalPeople = 0; let totalFemale = 0; let totalPrice = 0;
+            const multiStoreCounts = group.multiStoreItemCounts || {};
+            const storeItemCounts = multiStoreCounts[activeStore] || {};
+
+            document.getElementById('current-store-title').innerText = `[${activeStore}]`;
+
+            let totalPeopleAllStores = 0; 
+            let totalFemaleAllStores = 0; 
+            let totalPriceAllStores = 0;
             let visibleItemsCount = 0;
 
             (globalSettings.menuItems || []).forEach(item => {
                 const itemIdStr = String(item.id);
                 if (!hiddenItems.includes(itemIdStr)) visibleItemsCount++;
+            });
+
+            Object.keys(multiStoreCounts).forEach(sName => {
+                const sItems = multiStoreCounts[sName];
+                Object.keys(sItems).forEach(itemId => {
+                    const counts = sItems[itemId] || { count: 0, femaleCount: 0 };
+                    totalPeopleAllStores += counts.count;
+                    totalFemaleAllStores += counts.femaleCount;
+                    const itemDef = (globalSettings.menuItems || []).find(m => String(m.id) === String(itemId));
+                    if (itemDef) {
+                        totalPriceAllStores += counts.count * (itemDef.price || 0);
+                    }
+                });
             });
 
             let isRebuildNeeded = false;
@@ -958,10 +1065,7 @@
                 const itemIdStr = String(item.id);
                 if (hiddenItems.includes(itemIdStr)) return;
 
-                const counts = itemCounts[itemIdStr] || { count: 0, femaleCount: 0 };
-                totalPeople += counts.count;
-                totalFemale += counts.femaleCount;
-                totalPrice += counts.count * (item.price || 0);
+                const counts = storeItemCounts[itemIdStr] || { count: 0, femaleCount: 0 };
 
                 const countInput = document.getElementById(`count-${itemIdStr}`);
                 if (countInput && document.activeElement !== countInput) countInput.value = counts.count;
@@ -973,9 +1077,9 @@
                 }
             });
 
-            document.getElementById('sum-people').innerText = totalPeople;
-            document.getElementById('sum-female').innerText = totalFemale;
-            document.getElementById('sum-price').innerText = '$' + totalPrice.toLocaleString();
+            document.getElementById('sum-people').innerText = totalPeopleAllStores;
+            document.getElementById('sum-female').innerText = totalFemaleAllStores;
+            document.getElementById('sum-price').innerText = '$' + totalPriceAllStores.toLocaleString();
             
             const depAmount = group.depositAmount || 0;
             const depDate = group.depositDate || '';
@@ -986,7 +1090,7 @@
                 document.getElementById('sum-deposit').innerHTML = `<span style="color:#fbc02d;">尚未繳付訂金</span>`;
             }
 
-            const balance = totalPrice - depAmount;
+            const balance = totalPriceAllStores - depAmount;
             document.getElementById('sum-balance').innerText = '$' + balance.toLocaleString();
 
             const taxId = group.taxId || '';
@@ -997,35 +1101,56 @@
             const group = groupsData[groupId];
             if (!group) return;
 
-            const itemCounts = group.itemCounts || {};
-            if (!itemCounts[itemIdStr]) itemCounts[itemIdStr] = { count: 0, femaleCount: 0 };
+            if (!group.multiStoreItemCounts) group.multiStoreItemCounts = {};
+            if (!group.multiStoreItemCounts[activeStore]) group.multiStoreItemCounts[activeStore] = {};
             
+            const storeCounts = group.multiStoreItemCounts[activeStore];
+            if (!storeCounts[itemIdStr]) storeCounts[itemIdStr] = { count: 0, femaleCount: 0 };
+
             if (value < 0) value = 0;
-            if (field === 'femaleCount' && value > itemCounts[itemIdStr].count) {
-                value = itemCounts[itemIdStr].count;
+            if (field === 'femaleCount' && value > storeCounts[itemIdStr].count) {
+                value = storeCounts[itemIdStr].count;
                 window.customAlert("指定女師人數不能超過該項目的總人數喔！");
             }
 
-            itemCounts[itemIdStr][field] = value;
-            if (field === 'count' && itemCounts[itemIdStr].femaleCount > value) {
-                itemCounts[itemIdStr].femaleCount = value;
+            storeCounts[itemIdStr][field] = value;
+            if (field === 'count' && storeCounts[itemIdStr].femaleCount > value) {
+                storeCounts[itemIdStr].femaleCount = value;
             }
 
-            group.itemCounts = itemCounts;
             renderItemSelections(group); 
             renderGroupList(); 
             
-            await updateDoc(doc(db, "groups", groupId), { itemCounts });
+            await updateDoc(doc(db, "groups", groupId), { multiStoreItemCounts: group.multiStoreItemCounts });
+        };
+
+        window.switchActiveStore = (storeName) => {
+            activeStore = storeName;
+            if (currentGroupId && groupsData[currentGroupId]) {
+                loadStoreTime(groupsData[currentGroupId], activeStore);
+                renderItemSelections(groupsData[currentGroupId]);
+            }
         };
 
         function updateStoreOptions() {
-            const select = document.getElementById('db-store');
-            const currentVal = select.value;
-            select.innerHTML = '<option value="">-- 請選擇分店 --</option>';
+            const select = document.getElementById('active-store-selector');
+            if (!select) return;
+            const currentVal = activeStore;
+            select.innerHTML = '';
             Object.keys(globalSettings.stores || {}).forEach(store => {
-                if (globalSettings.stores[store]) select.innerHTML += `<option value="${store}">${store}</option>`;
+                if (globalSettings.stores[store]) {
+                    select.innerHTML += `<option value="${store}">${store}</option>`;
+                }
             });
-            if (currentVal) select.value = currentVal;
+            if (globalSettings.stores[currentVal]) {
+                select.value = currentVal;
+            } else {
+                const firstStore = Object.keys(globalSettings.stores).find(s => globalSettings.stores[s]);
+                if (firstStore) {
+                    activeStore = firstStore;
+                    select.value = firstStore;
+                }
+            }
         }
 
         function renderAdminSettings() {
@@ -1033,13 +1158,12 @@
             sContainer.innerHTML = '';
             Object.keys(globalSettings.stores).forEach(store => {
                 const isChecked = globalSettings.stores[store];
-                const isDefault = (store === '中清店');
                 sContainer.innerHTML += `
                     <div class="setting-item">
                         <span style="color:var(--text-light); font-size:15px;">${store}</span>
                         <label style="margin:0; cursor:pointer;">
                             <input type="checkbox" onchange="window.updateStoreSetting('${store}', this.checked)"
-                            ${isChecked ? 'checked' : ''} ${isDefault ? 'disabled' : ''}> 啟用
+                            ${isChecked ? 'checked' : ''}> 啟用
                         </label>
                     </div>
                 `;
