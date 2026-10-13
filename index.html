@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>不老松 - 團客管理系統後台</title>
+    <title>不老松 - 團客管理系統</title>
     
     <script>
         if (window.location.hash.length > 2) {
@@ -135,6 +135,10 @@
         }
         .top-bar h2 { font-size: 18px; font-weight: normal; color: var(--accent-gold); }
         
+        /* Client Top Bar (Logo) */
+        .client-header { display: none; text-align: center; padding: 15px; background: var(--secondary-dark); border-bottom: 1px solid var(--border-color); }
+        .client-header img { max-height: 55px; object-fit: contain; }
+        
         .view-section { padding: 25px; display: none; max-width: 900px; margin: 0 auto; width: 100%; }
         .view-section.active { display: block; }
         
@@ -201,6 +205,7 @@
         .client-mode #main-content { margin-left: 0; }
         .client-mode .admin-only { display: none !important; }
         .client-mode body { background-color: var(--secondary-dark); }
+        .client-mode .client-header { display: block !important; } /* 客端顯示 Logo */
         
         @media (max-width: 768px) {
             #sidebar { position: absolute; height: 100%; box-shadow: 5px 0 20px rgba(0,0,0,0.5); }
@@ -246,6 +251,12 @@
     </div>
 
     <div id="main-content">
+        <!-- 客端專屬 Logo 頂端列 -->
+        <div class="client-header">
+            <img src="logo.png" alt="不老松" onerror="this.src='https://via.placeholder.com/150x50?text=Logo'">
+        </div>
+        
+        <!-- 管理端頂端列 -->
         <div class="top-bar admin-only">
             <button class="menu-btn" onclick="toggleSidebar()">☰</button>
             <h2 id="top-bar-title">請選擇或新增專案</h2>
@@ -611,7 +622,6 @@
             if(g.status === '已確認') statusClass = 'status-confirmed';
             if(g.status === '已完成') statusClass = 'status-completed';
 
-            // 計算人數與項目摘要
             let totalPeople = 0;
             let summaryText = [];
             if (g.itemCounts) {
@@ -890,7 +900,7 @@
 
             group.itemCounts = itemCounts;
             renderItemSelections(group); 
-            renderGroupList(); // 即時更新左側列表數字
+            renderGroupList(); 
             
             await updateDoc(doc(db, "groups", groupId), { itemCounts });
         };
