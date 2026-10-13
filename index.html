@@ -7,6 +7,7 @@
     <style>
         /* 深色高質感主題 (Dark Zen Theme) */
         :root {
+            color-scheme: dark; /* 讓原生選擇器支援深色模式 */
             --primary-dark: #121212;
             --secondary-dark: #1e1e1e;
             --primary-green: #1b5e20;
@@ -142,6 +143,18 @@
         input:focus, select:focus, textarea:focus { border-color: var(--accent-gold); outline: none; }
         input[readonly], select:disabled { background-color: rgba(255,255,255,0.05); color: #888; cursor: not-allowed; border-color: transparent;}
         
+        /* 讓日期與時間的選擇圖示反轉為白色，並確保滑鼠游標為點擊狀態 */
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+            opacity: 0.8;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator:hover,
+        input[type="time"]::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+        }
+
         .notice-box { background: rgba(212, 175, 55, 0.1); border-left: 4px solid var(--accent-gold); padding: 20px; margin-bottom: 25px; border-radius: 0 4px 4px 0; font-size: 14px; line-height: 1.8; color: #ddd; }
         
         /* Guest List */
@@ -494,13 +507,11 @@
                 
                 if (docSnap.exists()) {
                     globalSettings = docSnap.data();
-                    // 防呆：如果 DB 裡有檔案，但是菜單陣列是空的，幫他補滿
                     if (!globalSettings.menuItems || globalSettings.menuItems.length === 0) {
                         globalSettings.menuItems = [...photoDefaultMenu];
                         shouldForceUpdate = true;
                     }
                 } else {
-                    // 全新初始化
                     globalSettings = {
                         stores: { "中清店": true, "中港店": false, "中科店": false },
                         menuItems: [...photoDefaultMenu]
