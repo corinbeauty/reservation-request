@@ -216,6 +216,15 @@
         .check-mode #main-content { margin-left: 0; padding-top: 20px;}
         .check-mode body { background-color: var(--bg-dark); }
 
+        #image-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 10001; display: none;
+            justify-content: center; align-items: center; cursor: zoom-out;
+        }
+        #image-modal-img {
+            max-width: 90%; max-height: 90%; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+
         @media (max-width: 768px) {
             #sidebar { position: absolute; height: 100%; box-shadow: 5px 0 20px rgba(0,0,0,0.5); }
             .top-bar { padding: 15px; }
@@ -227,6 +236,10 @@
     </style>
 </head>
 <body>
+
+    <div id="image-modal-overlay" onclick="window.closeImage()">
+        <img id="image-modal-img" src="" alt="Enlarged Image">
+    </div>
 
     <div id="custom-modal-overlay">
         <div class="custom-modal">
@@ -271,7 +284,6 @@
 
         <!-- 一般管理/填寫視圖 -->
         <div id="view-group" class="view-section">
-            
             <div class="notice-box" style="padding: 20px 25px;">
                 <h4 style="color: var(--accent-gold); font-size: 18px; margin-bottom: 15px; border-bottom: 1px dashed rgba(212, 175, 55, 0.3); padding-bottom: 10px; font-weight: normal;">📋 【服務流程與預約注意事項】</h4>
                 
@@ -307,11 +319,19 @@
                     <div style="color: #ccc; font-size: 14px; margin-top: 4px; padding-left: 5px;">👥 顧客休息室約可容納 40 位，實際安排請依各店現場狀況為準。</div>
                 </div>
 
-                <div>
+                <div style="margin-bottom: 15px;">
                     <strong style="color: #fff; font-size: 15px;">📞 五、其他注意事項</strong><br>
                     <div style="color: #ccc; font-size: 14px; margin-top: 4px; padding-left: 5px; line-height: 1.6;">
                         如有特殊需求、服務流程或人數安排等問題，請提前洽詢 <b>各店主管</b>，以利事前安排並確保服務順暢。<br>
                         ✨ 感謝您的配合，讓每位顧客都能享有更完善、舒適的服務體驗！
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 15px;">
+                    <strong style="color: #fff; font-size: 15px; display: block; margin-bottom: 10px;">📄 價目表參考 (點擊可放大)</strong>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <img src="一般價目表.jpg" alt="一般價目表" onclick="window.openImage(this.src)" style="width: 120px; height: 160px; object-fit: cover; border-radius: 6px; cursor: zoom-in; border: 1px solid var(--border-color); box-shadow: 0 4px 8px rgba(0,0,0,0.5); transition: 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onerror="this.src='https://placehold.co/240x320/1e1e1e/d4af37?text=一般價目表'">
+                        <img src="套餐價目表.jpg" alt="套餐價目表" onclick="window.openImage(this.src)" style="width: 120px; height: 160px; object-fit: cover; border-radius: 6px; cursor: zoom-in; border: 1px solid var(--border-color); box-shadow: 0 4px 8px rgba(0,0,0,0.5); transition: 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onerror="this.src='https://placehold.co/240x320/1e1e1e/d4af37?text=套餐價目表'">
                     </div>
                 </div>
             </div>
@@ -555,6 +575,16 @@
         let groupsData = {};
         let currentGroupId = null;
         let activeStore = "";
+
+        window.openImage = (src) => {
+            document.getElementById('image-modal-img').src = src;
+            document.getElementById('image-modal-overlay').style.display = 'flex';
+        };
+
+        window.closeImage = () => {
+            document.getElementById('image-modal-overlay').style.display = 'none';
+            document.getElementById('image-modal-img').src = '';
+        };
 
         window.customAlert = (msg) => {
             return new Promise((resolve) => {
